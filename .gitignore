@@ -1,0 +1,9 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+data/*.csv
+customer_shopping_data.csv
+*.ipynb_checkpoints
