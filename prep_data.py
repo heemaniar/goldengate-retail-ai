@@ -1,17 +1,42 @@
 """
-prep_data.py - Augment the Istanbul Mall dataset for MallPulse.
+prep_data.py — Augment the Istanbul Mall dataset for MallPulse.
+
 Run from the mallpulse/ project root with the venv active:
     python prep_data.py
 
 Requires: customer_shopping_data.csv in the same directory.
-Produces: 7 CSVs in ./data/
+Produces: 8 CSVs in ./data/
+
+Section 9 — fact_foot_traffic design notes
+-------------------------------------------
+Visitor counts are grounded in the actual daily transaction volumes from the
+source CSV, not purely random, so the agent's answers about foot traffic are
+consistent with its answers about revenue and transactions.
+
+Key design decisions:
+  1. GLA baseline  : daily visitor target = gross_leasable_sqm × 0.08
+                     (calibrated to typical Istanbul mall benchmarks)
+  2. Busyness mult : actual daily txn_count ÷ 28-day centred rolling average
+                     per mall — a day with twice the usual transactions gets
+                     twice the foot traffic. Clipped to [0.30, 3.0].
+  3. 2020 backfill : source CSV starts Jan 2021; the 2020 period uses each
+                     mall's long-run average txn rate (busy_mult = 1.0) so
+                     the calendar spine is complete without gaps.
+  4. Browsing boost: weekends +40%, Turkish holidays ×1.50 on top — captures
+                     visitors who come to browse but do not purchase (real
+                     conversion rates are lower on leisure days).
+  5. Hourly spread : Gaussian bell curve centred at 14:00 (σ = 3 h) then
+                     Poisson noise, giving realistic intra-day variance.
 """
+
 import os
+import numpy as np
 import pandas as pd
 import requests
 import holidays
 from pathlib import Path
 
+np.random.seed(42)
 DATA = Path('data')
 DATA.mkdir(exist_ok=True)
 
@@ -19,7 +44,7 @@ DATA.mkdir(exist_ok=True)
 print("Loading customer_shopping_data.csv...")
 raw = pd.read_csv('customer_shopping_data.csv')
 raw['invoice_date'] = pd.to_datetime(raw['invoice_date'], dayfirst=True)
-print(f"  {len(raw):,} rows | columns: {list(raw.columns)}")
+print(f"  {len(raw):,} rows | date range: {raw['invoice_date'].min().date()} → {raw['invoice_date'].max().date()}")
 
 # ── 2) dim_mall — 10 real Istanbul malls with lat/lon ────────────────────────
 MALL_GEO = {
@@ -70,7 +95,7 @@ for mall in dim_mall['mall_name']:
         chosen = names[hash((mall, cat)) % len(names)]
         tenants.append({
             'tenant_id': (
-                f't_{chosen.lower().replace(" ", "_").replace("&", "").replace("__","_")}'
+                f't_{chosen.lower().replace(" ", "_").replace("&", "").replace("__", "_")}'
                 f'_{mall_lookup[mall]}'
             ),
             'tenant_name': chosen,
@@ -86,22 +111,17 @@ dim_tenant.to_csv(DATA / 'dim_tenant.csv', index=False)
 print(f"  dim_tenant.csv: {len(dim_tenant)} rows")
 
 # ── 4) fact_transactions — map raw rows to tenant/mall IDs ──────────────────
-# The raw dataset uses shopping_mall names matching MALL_GEO keys
 mall_name_to_id = dict(zip(dim_mall['mall_name'], dim_mall['mall_id']))
 tenant_key = {
     (r['mall_id'], r['category']): r['tenant_id']
     for _, r in dim_tenant.iterrows()
 }
 
-raw['mall_id'] = raw['shopping_mall'].map(mall_name_to_id)
-raw['tenant_id'] = raw.apply(
-    lambda r: tenant_key.get((r['mall_id'], r['category'])), axis=1
-)
+raw['mall_id']    = raw['shopping_mall'].map(mall_name_to_id)
+raw['tenant_id']  = raw.apply(lambda r: tenant_key.get((r['mall_id'], r['category'])), axis=1)
 raw['total_amount'] = raw['quantity'] * raw['price']
 
-fact_transactions = raw.rename(
-    columns={'price': 'unit_price', 'invoice_date': 'date'}
-)[[
+fact_transactions = raw.rename(columns={'price': 'unit_price', 'invoice_date': 'date'})[[
     'invoice_no', 'tenant_id', 'mall_id', 'customer_id', 'date',
     'category', 'quantity', 'unit_price', 'total_amount', 'payment_method',
 ]]
@@ -118,7 +138,7 @@ def age_band(a):
     return '65+'
 
 dim_customer = raw[['customer_id', 'gender', 'age']].drop_duplicates('customer_id').copy()
-dim_customer['age_band'] = dim_customer['age'].apply(age_band)
+dim_customer['age_band']     = dim_customer['age'].apply(age_band)
 dim_customer['loyalty_tier'] = 'Standard'
 dim_customer[['customer_id', 'gender', 'age_band', 'loyalty_tier']].to_csv(
     DATA / 'dim_customer.csv', index=False
@@ -130,9 +150,9 @@ def lease_for(tenant_id):
     rent = 8000 + (hash(tenant_id) % 12000)
     pct  = round(0.04 + (hash(tenant_id) % 10) / 200, 3)
     return {
-        'tenant_id': tenant_id,
-        'lease_start_date': '2020-01-01',
-        'lease_end_date': '2025-12-31',
+        'tenant_id':         tenant_id,
+        'lease_start_date':  '2020-01-01',
+        'lease_end_date':    '2025-12-31',
         'monthly_base_rent': rent,
         'rent_pct_of_sales': pct,
     }
@@ -173,16 +193,131 @@ try:
         'precipitation_mm': r['daily']['precipitation_sum'],
         'weather_code':     r['daily']['weather_code'],
     })
-    # Replicate the same weather row for all 10 malls
     fact_weather = pd.concat(
         [wdf.assign(mall_id=m) for m in dim_mall['mall_id']],
-        ignore_index=True
+        ignore_index=True,
     )[['mall_id', 'date', 'temperature_c', 'precipitation_mm', 'weather_code']]
     fact_weather.to_csv(DATA / 'fact_weather.csv', index=False)
     print(f"  fact_weather.csv: {len(fact_weather):,} rows")
 except Exception as e:
     print(f"  WARNING: Weather fetch failed ({e}). Skipping fact_weather.csv.")
-    print("  Re-run prep_data.py when you have internet access to get the weather data.")
+    print("  Re-run prep_data.py when you have internet access.")
 
-print("\nDone! CSVs written to ./data/")
-print("Run 'ls data/' to verify all 7 files are present.")
+# ── 9) fact_foot_traffic — transaction-grounded hourly visitor estimates ──────
+#
+# Source CSV covers Jan 2021 – Mar 2023. Our calendar spine starts Jan 2020.
+# The 2020 period is backfilled with each mall's long-run average (busy_mult=1.0).
+# See module docstring for full design rationale.
+print("  Building fact_foot_traffic (transaction-grounded)...")
+
+PEAK_HOURS              = list(range(10, 22))   # 12 hourly slots: 10am-9pm
+BASE_VISITORS_PER_SQM  = 0.08                   # target ~20K/day for a 250K sqm mall
+
+# Gaussian bell curve centred at 14:00 (2pm), σ = 3 h; normalised to sum = 1
+hr_weights = np.array([np.exp(-0.5 * ((h - 14) / 3) ** 2) for h in PEAK_HOURS])
+hr_weights /= hr_weights.sum()
+
+# ── 9a) Actual daily transaction counts from source CSV ──────────────────────
+txn_daily = (
+    fact_transactions
+    .assign(date_dt=lambda df: pd.to_datetime(df['date']))
+    .groupby(['mall_id', 'date_dt'])
+    .size()
+    .rename('txn_count')
+    .reset_index()
+)
+
+# ── 9b) Full mall × date spine (Jan 2020 – Apr 2023) ────────────────────────
+all_dates = pd.date_range('2020-01-01', '2023-04-01', freq='D')
+spine = pd.MultiIndex.from_product(
+    [dim_mall['mall_id'].tolist(), all_dates],
+    names=['mall_id', 'date_dt'],
+).to_frame(index=False)
+
+spine = spine.merge(txn_daily, on=['mall_id', 'date_dt'], how='left')
+spine['txn_count'] = spine['txn_count'].fillna(0).astype(int)
+
+# ── 9c) 28-day centred rolling average per mall → busyness multiplier ────────
+spine = spine.sort_values(['mall_id', 'date_dt']).reset_index(drop=True)
+
+# Rolling average uses only the 2021-2023 data (2020 stays 0 and is excluded
+# from the window mean via min_periods).
+spine['rolling_avg'] = (
+    spine.groupby('mall_id')['txn_count']
+    .transform(lambda s: s.rolling(28, min_periods=5, center=True).mean())
+)
+# For rows where rolling_avg is NaN (deep 2020 period), use the mall's global mean
+mall_global_avg = (
+    spine[spine['txn_count'] > 0]
+    .groupby('mall_id')['txn_count']
+    .mean()
+)
+spine['rolling_avg'] = spine.apply(
+    lambda r: mall_global_avg.get(r['mall_id'], 10.0)
+    if pd.isna(r['rolling_avg']) else r['rolling_avg'],
+    axis=1,
+).clip(lower=1.0)
+
+# busy_mult: 2020 and zero-txn days default to 1.0 (average busyness)
+spine['busy_mult'] = np.where(
+    spine['txn_count'] > 0,
+    (spine['txn_count'] / spine['rolling_avg']).clip(0.30, 3.0),
+    1.0,
+)
+
+# ── 9d) Weekend and holiday browsing boosts ───────────────────────────────────
+date_flags = (
+    dim_date.set_index(dim_date['date'].dt.date)[['is_weekend', 'is_holiday']]
+)
+spine['_date_key'] = spine['date_dt'].dt.date
+spine['is_weekend'] = spine['_date_key'].map(date_flags['is_weekend']).fillna(False)
+spine['is_holiday'] = spine['_date_key'].map(date_flags['is_holiday']).fillna(False)
+
+spine['browse_boost'] = 1.0
+spine.loc[spine['is_weekend'], 'browse_boost'] = 1.40
+# Holiday boost compounds on top of weekend boost where both are true
+spine.loc[spine['is_holiday'], 'browse_boost'] = (
+    spine.loc[spine['is_holiday'], 'browse_boost'] * 1.50
+)
+
+# ── 9e) GLA-based daily total visitors per mall-day ──────────────────────────
+sqm_lookup = dim_mall.set_index('mall_id')['gross_leasable_sqm']
+spine['base_daily'] = spine['mall_id'].map(sqm_lookup) * BASE_VISITORS_PER_SQM
+spine['daily_total'] = (
+    spine['base_daily'] * spine['busy_mult'] * spine['browse_boost']
+).clip(lower=50).astype(int)
+
+# ── 9f) Vectorised expansion to hourly rows ───────────────────────────────────
+# Repeat each spine row 12 times (once per peak hour), assign hours in order.
+spine_exp = spine.loc[spine.index.repeat(len(PEAK_HOURS))].reset_index(drop=True)
+spine_exp['hour']       = np.tile(PEAK_HOURS, len(spine))
+spine_exp['hr_weight']  = spine_exp['hour'].map(dict(zip(PEAK_HOURS, hr_weights)))
+expected_hourly         = (spine_exp['daily_total'] * spine_exp['hr_weight']).clip(lower=0)
+spine_exp['estimated_visits'] = np.random.poisson(expected_hourly).clip(min=0)
+
+fact_foot_traffic = spine_exp[['mall_id', '_date_key', 'hour', 'estimated_visits']].rename(
+    columns={'_date_key': 'date'}
+)
+fact_foot_traffic.to_csv(DATA / 'fact_foot_traffic.csv', index=False)
+print(f"  fact_foot_traffic.csv: {len(fact_foot_traffic):,} rows")
+
+# ── Quick sanity check ────────────────────────────────────────────────────────
+daily_check = (
+    fact_foot_traffic
+    .groupby(['mall_id', 'date'])['estimated_visits']
+    .sum()
+    .reset_index()
+    .merge(dim_mall[['mall_id', 'mall_name', 'gross_leasable_sqm']], on='mall_id')
+)
+print("\n  Foot traffic daily averages by mall (sanity check):")
+summary = (
+    daily_check
+    .groupby('mall_name')['estimated_visits']
+    .agg(['mean', 'min', 'max'])
+    .astype(int)
+    .sort_values('mean', ascending=False)
+)
+print(summary.to_string())
+
+print(f"\nDone! 8 CSVs written to ./data/")
+print("Run 'ls data/' to verify all 8 files are present.")
