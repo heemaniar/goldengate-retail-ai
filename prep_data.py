@@ -30,11 +30,18 @@ Key design decisions:
 """
 
 import os
+import hashlib
 import numpy as np
 import pandas as pd
 import requests
 import holidays
 from pathlib import Path
+
+def dhash(*args) -> int:
+    """Deterministic hash regardless of PYTHONHASHSEED.
+    Uses MD5 so output is identical across machines and Python versions."""
+    key = '|'.join(str(a) for a in args)
+    return int(hashlib.md5(key.encode()).hexdigest(), 16)
 
 np.random.seed(42)
 DATA = Path('data')
@@ -88,22 +95,127 @@ TENANTS = {
     'Souvenir':        ['Istanbul Memories'],
 }
 
+# Store format — reflects what each brand actually is in a real Istanbul mall.
+# Anchor: large format driving overall traffic; Restaurant Pad: full-service F&B;
+# Food Court: counter-only shared-hall unit; Kiosk: no-wall corridor stand.
+TENANT_FORMAT = {
+    'Zara':              'Anchor',          # flagship, 2+ floors, bookends wing
+    'H&M':               'Anchor',
+    'LC Waikiki':        'Anchor',
+    'MediaMarkt':        'Anchor',          # consumer electronics hypermarket
+    'Vatan Bilgisayar':  'Anchor',          # computing superstore
+    'Mango':             'In-line',
+    'Bershka':           'In-line',
+    'Nike':              'In-line',
+    'Flo':               'In-line',
+    'Derimod':           'In-line',
+    'Skechers':          'In-line',
+    'D&R':               'In-line',
+    'Remzi':             'In-line',
+    'Sephora':           'In-line',
+    'MAC':               'In-line',
+    'Watsons':           'In-line',
+    'Gratis':            'In-line',
+    'Toyzz Shop':        'In-line',
+    'Lego Store':        'In-line',
+    'Starbucks':         'Restaurant Pad',  # full-service café, sometimes terrace
+    'Mado':              'Restaurant Pad',  # full-service Turkish dessert/dining
+    'Burger King':       'Food Court',      # counter-service, shared seating hall
+    'Istanbul Memories': 'Kiosk',           # open-fronted souvenir stand, no walls
+}
+
+# Subcategory — specific retail segment within the parent category.
+# Enables queries like "which Fast Fashion subcategory drives most revenue?"
+TENANT_SUBCATEGORY = {
+    'Zara':              'Fast Fashion',
+    'H&M':               'Fast Fashion',
+    'LC Waikiki':        'Fast Fashion',
+    'Mango':             'Premium Casual',
+    'Bershka':           'Fast Fashion',
+    'Nike':              'Athletic',
+    'Flo':               'Casual',
+    'Derimod':           'Leather Goods',
+    'Skechers':          'Athletic',
+    'D&R':               'Books & Music',
+    'Remzi':             'Books & Music',
+    'Sephora':           'Makeup & Skincare',
+    'MAC':               'Makeup',
+    'Watsons':           'Pharmacy & Health',
+    'Gratis':            'Pharmacy & Health',
+    'Starbucks':         'Coffee & Café',
+    'Mado':              'Casual Dining',
+    'Burger King':       'Fast Food',
+    'Toyzz Shop':        'Licensed Toys',
+    'Lego Store':        'Educational Toys',
+    'MediaMarkt':        'Consumer Electronics',
+    'Vatan Bilgisayar':  'Computing',
+    'Istanbul Memories': 'Local Gifts',
+}
+
+# Base unit size (sqm) grounded in real Istanbul mall footprints.
+# Anchors (Zara ~1200, MediaMarkt ~2800) are order-of-magnitude larger than
+# kiosks (Istanbul Memories ~18) — correcting the previous flat 100–500 range.
+TENANT_SIZE_BASE = {
+    'Zara':              1200,
+    'H&M':               1000,
+    'LC Waikiki':        1500,
+    'MediaMarkt':        2800,
+    'Vatan Bilgisayar':  1400,
+    'Mango':              350,
+    'Bershka':            280,
+    'Nike':               180,
+    'Flo':                140,
+    'Derimod':            155,
+    'Skechers':           130,
+    'Sephora':            160,
+    'MAC':                 90,
+    'Watsons':            190,
+    'Gratis':             170,
+    'D&R':                420,
+    'Remzi':              310,
+    'Toyzz Shop':         380,
+    'Lego Store':         220,
+    'Starbucks':          140,
+    'Mado':               270,
+    'Burger King':         95,
+    'Istanbul Memories':   18,
+}
+
+# Mall size multiplier — larger GLA malls can accommodate larger individual units.
+MALL_SIZE_MULT = {
+    'Forum Istanbul':    1.30,
+    'Cevahir AVM':       1.25,
+    'Mall of Istanbul':  1.20,
+    'Kanyon':            1.10,
+    'Emaar Square Mall': 1.00,
+    'Zorlu Center':      0.95,
+    'Viaport Outlet':    0.90,
+    'Istinye Park':      0.90,
+    'Metropol AVM':      0.85,
+    'Metrocity':         0.85,
+}
+
 mall_lookup = dict(zip(dim_mall['mall_name'], dim_mall['mall_id']))
 tenants = []
 for mall in dim_mall['mall_name']:
     for cat, names in TENANTS.items():
-        chosen = names[hash((mall, cat)) % len(names)]
+        chosen    = names[dhash(mall, cat) % len(names)]
+        base_sqm  = TENANT_SIZE_BASE[chosen]
+        mall_mult = MALL_SIZE_MULT[mall]
+        # ±12% deterministic variation around the brand baseline
+        variation = 0.88 + (dhash(mall, chosen, 'size') % 25) / 100  # 0.88–1.12
+        unit_size = max(8, int(base_sqm * mall_mult * variation))
         tenants.append({
             'tenant_id': (
                 f't_{chosen.lower().replace(" ", "_").replace("&", "").replace("__", "_")}'
                 f'_{mall_lookup[mall]}'
             ),
-            'tenant_name': chosen,
-            'mall_id': mall_lookup[mall],
-            'category': cat,
-            'subcategory': cat,
-            'unit_size_sqm': 100 + (hash((mall, cat)) % 400),
-            'store_format': 'In-line',
+            'tenant_name':   chosen,
+            'mall_id':       mall_lookup[mall],
+            'category':      cat,
+            'subcategory':   TENANT_SUBCATEGORY[chosen],
+            'unit_size_sqm': unit_size,
+            'store_format':  TENANT_FORMAT[chosen],
         })
 
 dim_tenant = pd.DataFrame(tenants)
@@ -138,29 +250,111 @@ def age_band(a):
     if a < 65: return '55-64'
     return '65+'
 
+# Loyalty tier: spend-based segmentation on single transaction amount.
+# The source dataset has no repeat-purchase history (each customer_id appears
+# exactly once), so transaction value is used as a proxy for spend level.
+# Percentile thresholds: Gold ≥ p85, Silver p60–p85, Bronze p30–p60, Standard < p30.
+spend = raw.groupby('customer_id')['total_amount'].sum()
+p85, p60, p30 = spend.quantile(0.85), spend.quantile(0.60), spend.quantile(0.30)
+print(f"    Loyalty thresholds — Gold ≥ ₺{p85:.0f} | Silver ≥ ₺{p60:.0f} | Bronze ≥ ₺{p30:.0f}")
+
+def loyalty_tier(amount):
+    if amount >= p85: return 'Gold'
+    if amount >= p60: return 'Silver'
+    if amount >= p30: return 'Bronze'
+    return 'Standard'
+
 dim_customer = raw[['customer_id', 'gender', 'age']].drop_duplicates('customer_id').copy()
 dim_customer['age_band']     = dim_customer['age'].apply(age_band)
-dim_customer['loyalty_tier'] = 'Standard'
+dim_customer['loyalty_tier'] = dim_customer['customer_id'].map(spend).apply(loyalty_tier)
 dim_customer[['customer_id', 'gender', 'age_band', 'loyalty_tier']].to_csv(
     DATA / 'dim_customer.csv', index=False
 )
-print(f"  dim_customer.csv: {len(dim_customer):,} rows")
+tier_dist = dim_customer['loyalty_tier'].value_counts().to_dict()
+print(f"  dim_customer.csv: {len(dim_customer):,} rows — tiers: {tier_dist}")
 
-# ── 6) dim_lease — synthetic but deterministic per tenant ───────────────────
-def lease_for(tenant_id):
-    rent = 8000 + (hash(tenant_id) % 12000)
-    pct  = round(0.04 + (hash(tenant_id) % 10) / 200, 3)
-    return {
-        'tenant_id':         tenant_id,
-        'lease_start_date':  '2020-01-01',
-        'lease_end_date':    '2025-12-31',
-        'monthly_base_rent': rent,
-        'rent_pct_of_sales': pct,
-    }
+# ── 6) dim_lease — format × size × prestige driven rent, staggered terms ────
+#
+# monthly_base_rent = rent_per_sqm × unit_size_sqm × prestige_mult × ±8% noise
+#   rent_per_sqm: highest for Kiosks (tiny space, premium per sqm),
+#                 lowest for Anchors (huge space, negotiate hard)
+#   prestige_mult: Zorlu/Istinye Park 1.6×, value malls 0.7×
+#
+# rent_pct_of_sales: F&B formats highest (high turnover), Anchors lowest
+#
+# Lease terms: four staggered cohorts so not all 80 tenants expire together.
+# Cohort 0 leases expired in 2021 — creates a realistic renewal scenario
+# the agent can surface when asked about upcoming contract risks.
 
-dim_lease = pd.DataFrame([lease_for(t) for t in dim_tenant['tenant_id']])
+MALL_PRESTIGE = {
+    'Zorlu Center':      'luxury',    # designer catchment, highest per-sqm
+    'Istinye Park':      'luxury',
+    'Kanyon':            'premium',
+    'Emaar Square Mall': 'premium',
+    'Forum Istanbul':    'standard',
+    'Cevahir AVM':       'standard',
+    'Mall of Istanbul':  'standard',
+    'Metropol AVM':      'value',
+    'Viaport Outlet':    'value',
+    'Metrocity':         'value',
+}
+PRESTIGE_RENT_MULT = {'luxury': 1.60, 'premium': 1.20, 'standard': 1.00, 'value': 0.70}
+
+# Monthly base rent per sqm (TRY 2020): kiosks highest per sqm, anchors lowest
+FORMAT_RENT_PER_SQM = {
+    'Kiosk':          900,
+    'Food Court':     550,
+    'Restaurant Pad': 380,
+    'In-line':        290,
+    'Anchor':         140,
+}
+
+# Rent % of sales range [min, max]: F&B highest turnover → highest %;
+# Tech/Anchor lowest (high-ticket, low-margin, strong negotiating power)
+FORMAT_RENT_PCT = {
+    'Kiosk':          (0.08, 0.12),
+    'Food Court':     (0.09, 0.12),
+    'Restaurant Pad': (0.07, 0.10),
+    'In-line':        (0.05, 0.09),
+    'Anchor':         (0.03, 0.07),
+}
+
+# Four staggered cohorts — 25% of tenants in each, dates spread across 2018-2021
+LEASE_COHORTS = [
+    ('2018-01-01', '2021-12-31'),  # cohort 0: expired — triggers renewal analysis
+    ('2019-06-01', '2024-05-31'),  # cohort 1: active, mid-cycle
+    ('2020-01-01', '2024-12-31'),  # cohort 2: active, runs full data period
+    ('2021-01-01', '2025-12-31'),  # cohort 3: newer tenants
+]
+
+lease_df = dim_tenant.merge(dim_mall[['mall_id', 'mall_name']], on='mall_id').copy()
+
+pres_mult    = lease_df['mall_name'].map(MALL_PRESTIGE).map(PRESTIGE_RENT_MULT)
+rent_per_sqm = lease_df['store_format'].map(FORMAT_RENT_PER_SQM)
+hash_var     = lease_df['tenant_id'].apply(
+    lambda t: 0.93 + (dhash(t, 'rent') % 15) / 100   # 0.93–1.07, ±7%
+)
+lease_df['monthly_base_rent'] = (
+    rent_per_sqm * lease_df['unit_size_sqm'] * pres_mult * hash_var
+).round(0).astype(int)
+
+def _rent_pct(row):
+    lo, hi = FORMAT_RENT_PCT[row['store_format']]
+    frac   = (dhash(row['tenant_id'], 'pct') % 100) / 99
+    return round(lo + frac * (hi - lo), 3)
+
+lease_df['rent_pct_of_sales'] = lease_df.apply(_rent_pct, axis=1)
+
+cohort = lease_df['tenant_id'].apply(lambda t: dhash(t, 'cohort') % 4)
+lease_df['lease_start_date'] = cohort.map({i: v[0] for i, v in enumerate(LEASE_COHORTS)})
+lease_df['lease_end_date']   = cohort.map({i: v[1] for i, v in enumerate(LEASE_COHORTS)})
+
+dim_lease = lease_df[['tenant_id', 'lease_start_date', 'lease_end_date',
+                       'monthly_base_rent', 'rent_pct_of_sales']]
 dim_lease.to_csv(DATA / 'dim_lease.csv', index=False)
 print(f"  dim_lease.csv: {len(dim_lease)} rows")
+cohort_dist = cohort.value_counts().sort_index().to_dict()
+print(f"    Lease cohorts: { {LEASE_COHORTS[k][0][:4]+'-'+LEASE_COHORTS[k][1][:4]: v for k,v in cohort_dist.items()} }")
 
 # ── 7) dim_date — with Turkish public holidays ───────────────────────────────
 tr = holidays.TR(years=range(2020, 2024))
