@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+.adk/
 data/*.csv
 customer_shopping_data.csv
 *.ipynb_checkpoints
