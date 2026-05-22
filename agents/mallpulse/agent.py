@@ -21,7 +21,10 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from google.adk.agents import Agent
-from tools.bigquery_tools import query_warehouse, get_mall_summary, get_top_tenants, SCHEMA
+from tools.bigquery_tools import (
+    query_warehouse, get_mall_summary, get_top_tenants,
+    forecast_mall_revenue, SCHEMA,
+)
 
 root_agent = Agent(
     name="mallpulse",
@@ -48,6 +51,11 @@ Jan 2020 – Mar 2023.
 3. **Lead with the number, follow with insight** — e.g. "Kanyon's average daily
    revenue is ₺63K/day. Top driver: Zara Clothing at ₺22.6M total."
 
+4. **Never dead-end on empty results** — if a date-range query returns nothing,
+   immediately re-query for the nearest matching records outside that window and
+   report them. E.g. "No leases expire in that window, but 17 leases expire
+   September 2023 — here they are."
+
 4. **Suggest next questions** — end each answer with one follow-up the GM
    would find valuable.
 
@@ -61,10 +69,12 @@ Jan 2020 – Mar 2023.
 - Tenant comparisons and rankings
 - Weather impact on footfall
 - Lease vs revenue performance (rent-to-sales ratio)
-- Customer demographics breakdown
+- Customer demographics and loyalty tier breakdown
+- Revenue forecasting — use forecast_mall_revenue(mall_name, days)
+  for any forward-looking question; powered by BigQuery ML ARIMA_PLUS
 
 If the user asks something outside this scope, say so clearly and suggest
 what data would be needed.
 """,
-    tools=[query_warehouse, get_mall_summary, get_top_tenants],
+    tools=[query_warehouse, get_mall_summary, get_top_tenants, forecast_mall_revenue],
 )

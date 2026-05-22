@@ -321,8 +321,8 @@ FORMAT_RENT_PCT = {
 
 # Four staggered cohorts — 25% of tenants in each, dates spread across 2018-2021
 LEASE_COHORTS = [
-    ('2018-01-01', '2021-12-31'),  # cohort 0: expired — triggers renewal analysis
-    ('2019-06-01', '2024-05-31'),  # cohort 1: active, mid-cycle
+    ('2018-01-01', '2021-12-31'),  # cohort 0: expired — triggers past-renewal analysis
+    ('2020-06-01', '2023-09-30'),  # cohort 1: expiring Sep 2023 — "next 12 months" demo
     ('2020-01-01', '2024-12-31'),  # cohort 2: active, runs full data period
     ('2021-01-01', '2025-12-31'),  # cohort 3: newer tenants
 ]

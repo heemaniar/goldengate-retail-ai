@@ -46,8 +46,10 @@ Aggregate tables (use these for speed):
   agg_mall_daily   : mall_id, date, total_revenue, total_transactions,
                      unique_customers
 
-ML model (available after Day 6):
-  revenue_forecast (BigQuery ML ARIMA_PLUS) — call via ML.FORECAST(...)
+ML model:
+  revenue_forecast — BigQuery ML ARIMA_PLUS, trained on agg_mall_daily.
+  Call forecast_mall_revenue(mall_name, days) — do NOT write raw ML.FORECAST SQL.
+  Returns daily revenue forecast with 90% confidence intervals.
 
 Date range: 2020-01-01 through 2023-03-08
 Malls: Kanyon, Forum Istanbul, Metrocity, Metropol AVM, Istinye Park,
@@ -153,3 +155,48 @@ def get_top_tenants(mall_name: str, metric: str = "revenue", limit: int = 10) ->
     LIMIT {limit}
     """
     return query_warehouse(sql)
+
+
+def forecast_mall_revenue(mall_name: str, days: int = 30) -> str:
+    """Forecast daily revenue for a mall using BigQuery ML ARIMA_PLUS model.
+
+    Uses a model trained on historical agg_mall_daily data.
+    Returns a markdown table with forecast dates, predicted revenue,
+    and 90% confidence interval bounds.
+
+    Args:
+        mall_name: Full mall name, e.g. 'Kanyon' or 'Forum Istanbul'.
+        days: Number of days to forecast ahead (default 30, max 90).
+
+    Returns:
+        Markdown table of forecasted daily revenue with confidence bounds.
+    """
+    days = min(int(days), 90)
+
+    # Resolve mall_name → mall_id first
+    id_sql = f"""
+    SELECT mall_id FROM `{PROJECT}.{DATASET}.dim_mall`
+    WHERE LOWER(mall_name) = LOWER('{mall_name}')
+    LIMIT 1
+    """
+    client   = _get_client()
+    id_rows  = list(client.query(id_sql).result())
+    if not id_rows:
+        return f"Mall '{mall_name}' not found. Check spelling."
+    mall_id = id_rows[0]["mall_id"]
+
+    sql = f"""
+    SELECT
+        DATE(forecast_timestamp)                    AS forecast_date,
+        ROUND(forecast_value, 0)                    AS forecast_revenue,
+        ROUND(prediction_interval_lower_bound, 0)   AS lower_90,
+        ROUND(prediction_interval_upper_bound, 0)   AS upper_90
+    FROM ML.FORECAST(
+        MODEL `{PROJECT}.{DATASET}.revenue_forecast`,
+        STRUCT({days} AS horizon, 0.90 AS confidence_level)
+    )
+    WHERE mall_id = '{mall_id}'
+    ORDER BY forecast_timestamp
+    """
+    result = query_warehouse(sql)
+    return f"**Revenue forecast for {mall_name} — next {days} days**\n\n" + result
