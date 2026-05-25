@@ -159,3 +159,27 @@ mallpulse (root orchestrator)
 - [ ] Fivetran shows first sync complete (green checkmark)
 - [ ] New BigQuery tables from Fivetran sync with correct row counts
 - [ ] API key entered in .env
+
+---
+
+## Day 9 — Fivetran MCP Wiring (2026-05-24)
+
+### What was done
+- Cloned `github.com/fivetran/fivetran-mcp` → `~/code/fivetran-mcp/`
+- Installed into mallpulse venv: `pip install ~/code/fivetran-mcp/`
+- Wired `McpToolset` (ADK 1.34.0) into `data_unifier` agent using `StdioConnectionParams`
+- MCP server spawned as subprocess via `sys.executable` + absolute path to `server.py`
+- `tool_filter` restricts agent to 5 read-only tools:
+  `get_account_info`, `list_connections`, `get_connection_details`,
+  `get_connection_state`, `get_connection_schema_config`
+- `FIVETRAN_ALLOW_WRITES=false` — agent cannot trigger syncs or modify connections
+
+### Test result ✅
+Q: "When did the transactions last sync? Is the Fivetran pipeline healthy?"
+A: Returned live Fivetran data — last sync 2026-05-24T23:26:42Z, state 'scheduled',
+   update_state 'on_schedule'. No hallucinations.
+
+### Architecture note
+- Deprecated `MCPToolset` → replaced with `McpToolset`
+- `tools/fivetran_tools.py` (REST wrapper) kept as utility but removed from agent tools
+- MCP server is the authoritative Fivetran integration for the agent

@@ -4,22 +4,63 @@ sub_agents.py — Three specialist ADK agents for MallPulse.
 Imported by agent.py and wired into the root orchestrator via AgentTool.
 Each agent has a narrow scope and a curated tool set — the root agent decides
 which specialist(s) to call based on the GM's question.
+
+Day 9: data_unifier now includes the official Fivetran MCP server toolset
+(McpToolset → StdioConnectionParams) for live pipeline monitoring.
 """
 
+import os
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
 from google.adk.agents import Agent
+from google.adk.tools.mcp_tool.mcp_toolset import (
+    McpToolset,
+    StdioConnectionParams,
+    StdioServerParameters,
+)
+
 from tools.bigquery_tools import (
-    query_warehouse,
+    SCHEMA,
+    forecast_mall_revenue,
     get_mall_summary,
     get_top_tenants,
     get_weather_traffic_correlation,
-    forecast_mall_revenue,
-    SCHEMA,
+    query_warehouse,
 )
-from tools.fivetran_tools import (
-    list_connectors,
-    get_connector_status,
-    trigger_sync,
-    get_pipeline_health_summary,
+
+# Load .env so FIVETRAN_API_KEY / FIVETRAN_API_SECRET are in the environment
+# before we spawn the MCP subprocess.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+_MCP_SERVER = str(Path.home() / "code" / "fivetran-mcp" / "server.py")
+
+# Fivetran MCP toolset — read-only pipeline monitoring tools only.
+# FIVETRAN_ALLOW_WRITES is intentionally not set, so write ops are blocked.
+fivetran_mcp = McpToolset(
+    connection_params=StdioConnectionParams(
+        server_params=StdioServerParameters(
+            command=sys.executable,
+            args=[_MCP_SERVER],
+            env={
+                **os.environ,
+                "FIVETRAN_API_KEY": os.getenv("FIVETRAN_API_KEY", ""),
+                "FIVETRAN_API_SECRET": os.getenv("FIVETRAN_API_SECRET", ""),
+                # Write ops OFF — agent must not trigger syncs or modify connections
+                "FIVETRAN_ALLOW_WRITES": "false",
+            },
+        ),
+        timeout=30.0,
+    ),
+    # Expose only the read-only pipeline-monitoring tools to the agent
+    tool_filter=[
+        "get_account_info",
+        "list_connections",
+        "get_connection_details",
+        "get_connection_state",
+        "get_connection_schema_config",
+    ],
 )
 
 # ── 1) Data Unifier ───────────────────────────────────────────────────────────
@@ -31,8 +72,8 @@ data_unifier = Agent(
     model="gemini-2.5-flash",
     description=(
         "Retrieves and presents shopping mall data: revenue, transactions, "
-        "foot traffic, weather impact, cross-mall comparisons, AND Fivetran "
-        "pipeline health (sync status, data freshness). "
+        "foot traffic, weather impact, cross-mall comparisons, AND live Fivetran "
+        "pipeline health (sync status, data freshness via official Fivetran MCP). "
         "Call this agent for any factual data question or pipeline-health question."
     ),
     instruction=f"""You are the MallPulse Data Unifier — a specialist in pulling
@@ -61,8 +102,11 @@ Recommender's job.
    re-query for the nearest data outside that window and say so.
 6. **Units**: monetary values are ₺ (Turkish Lira). Dates: YYYY-MM-DD.
 7. **Pipeline questions**: if the GM asks about data freshness, last sync,
-   or whether the pipeline is broken, use `get_pipeline_health_summary` first.
-   If a specific connector is mentioned, use `get_connector_status`.
+   or whether the pipeline is broken:
+   - Call `list_connections` to see all connectors and their sync state.
+   - Call `get_connection_details` with the connection ID for drill-down.
+   - Call `get_connection_state` to get the precise current sync state.
+   - Never guess at sync times — always retrieve them from Fivetran directly.
 
 ## What you cover
 - Revenue and transaction counts (by mall, category, period)
@@ -70,16 +114,13 @@ Recommender's job.
 - Cross-mall portfolio comparisons (use agg_mall_daily)
 - Weather impact on foot traffic (use get_weather_traffic_correlation)
 - Customer demographics by mall or category
-- Fivetran pipeline health: sync status, last sync time, broken connectors
+- Live Fivetran pipeline health: last sync time, connector state, schema config
 """,
     tools=[
         query_warehouse,
         get_mall_summary,
         get_weather_traffic_correlation,
-        get_pipeline_health_summary,
-        get_connector_status,
-        trigger_sync,
-        list_connectors,
+        fivetran_mcp,   # official Fivetran MCP server — live pipeline monitoring
     ],
 )
 

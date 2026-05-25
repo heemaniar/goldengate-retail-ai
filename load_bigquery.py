@@ -61,6 +61,12 @@ TABLE_SCHEMAS = {
         bigquery.SchemaField("hour",              "INTEGER"),
         bigquery.SchemaField("estimated_visits",  "INTEGER"),
     ],
+    "dim_customer": [
+        bigquery.SchemaField("customer_id",   "STRING"),
+        bigquery.SchemaField("gender",        "STRING"),
+        bigquery.SchemaField("age_band",      "STRING"),
+        bigquery.SchemaField("loyalty_tier",  "STRING"),
+    ],
 }
 
 TABLES = [
