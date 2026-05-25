@@ -15,10 +15,12 @@ The UI talks directly to the ADK multi-agent system:
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -145,9 +147,28 @@ with st.sidebar:
         "Agents powered by **Gemini 2.5 Flash** on Google ADK."
     )
     st.divider()
+
+    # ── Dashboard toggle ──────────────────────────────────────────────────────
+    st.markdown("### 📊 Live Dashboard")
+    dashboard_url = os.getenv("LOOKER_STUDIO_URL", "").strip()
+    if dashboard_url:
+        show_dash = st.toggle("Show Looker Studio dashboard", value=False)
+        st.session_state.show_dashboard = show_dash
+    else:
+        st.caption("_Dashboard coming soon — set LOOKER\\_STUDIO\\_URL in .env_")
+        st.session_state.show_dashboard = False
+
+    st.divider()
     if st.button("🗑️ Clear conversation", use_container_width=True):
         _reset_conversation()
 
+
+# ── Dashboard embed (full width, above chat) ──────────────────────────────────
+dashboard_url = os.getenv("LOOKER_STUDIO_URL", "").strip()
+if st.session_state.get("show_dashboard") and dashboard_url:
+    st.markdown("## 📊 Live Dashboard")
+    components.iframe(dashboard_url, height=620, scrolling=True)
+    st.divider()
 
 # ── Main chat area ─────────────────────────────────────────────────────────────
 st.markdown("# 🏬 MallPulse")
