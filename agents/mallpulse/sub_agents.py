@@ -20,6 +20,11 @@ from google.adk.tools.mcp_tool.mcp_toolset import (
     StdioConnectionParams,
     StdioServerParameters,
 )
+from google.genai.types import GenerateContentConfig, ThinkingConfig
+
+_FAST_CONFIG = GenerateContentConfig(
+    thinking_config=ThinkingConfig(thinking_budget=1024)
+)
 
 from tools.bigquery_tools import (
     SCHEMA,
@@ -74,6 +79,7 @@ fivetran_mcp = McpToolset(
 data_unifier = Agent(
     name="data_unifier",
     model="gemini-2.5-flash",
+    generate_content_config=_FAST_CONFIG,
     description=(
         "Retrieves and presents shopping mall data: revenue, transactions, "
         "foot traffic, weather impact, cross-mall comparisons, AND live Fivetran "
@@ -141,6 +147,7 @@ Recommender's job.
 tenant_diagnoser = Agent(
     name="tenant_diagnoser",
     model="gemini-2.5-flash",
+    generate_content_config=_FAST_CONFIG,
     description=(
         "Diagnoses tenant health: performance rankings, lease expiry risk, "
         "rent-to-sales ratio, and underperformer flags. "
@@ -192,6 +199,7 @@ Analyse tenants and surface actionable signals. Classify findings by urgency:
 action_recommender = Agent(
     name="action_recommender",
     model="gemini-2.5-flash",
+    generate_content_config=_FAST_CONFIG,
     description=(
         "Generates concrete, prioritised action items for mall GMs based on "
         "revenue forecasts, tenant diagnosis, and portfolio context. "

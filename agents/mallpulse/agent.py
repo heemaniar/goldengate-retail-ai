@@ -33,6 +33,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from google.adk.agents import Agent
 from google.adk.tools import AgentTool
+from google.genai.types import GenerateContentConfig, ThinkingConfig
 
 from agents.mallpulse.sub_agents import (
     data_unifier,
@@ -43,6 +44,9 @@ from agents.mallpulse.sub_agents import (
 root_agent = Agent(
     name="mallpulse",
     model="gemini-2.5-flash",
+    generate_content_config=GenerateContentConfig(
+        thinking_config=ThinkingConfig(thinking_budget=1024)
+    ),
     description=(
         "MallPulse — AI assistant for shopping mall General Managers. "
         "Orchestrates three specialist agents to answer questions about "

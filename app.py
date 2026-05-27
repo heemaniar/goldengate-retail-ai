@@ -56,76 +56,35 @@ EXAMPLE_PROMPTS = [
 ]
 
 
-# ── Session bootstrap ─────────────────────────────────────────────────────────
-def _bootstrap_session() -> tuple[Runner, str]:
-    """Create ADK session and runner exactly once; store in st.session_state."""
-    if "adk_runner" not in st.session_state:
-        svc = InMemorySessionService()
-        session = asyncio.run(
-            svc.create_session(app_name="mallpulse", user_id="gm")
-        )
-        st.session_state.adk_svc = svc
+# ── Runner bootstrap (cached across reruns and users) ─────────────────────────
+# @st.cache_resource ensures the MCP subprocess and BigQuery client are
+# initialised once per Cloud Run instance, not on every Streamlit rerun.
+@st.cache_resource
+def _get_runner() -> tuple[Runner, InMemorySessionService]:
+    svc = InMemorySessionService()
+    r = Runner(agent=root_agent, app_name="mallpulse", session_service=svc)
+    return r, svc
+
+
+runner, _svc = _get_runner()
+
+
+def _get_session_id() -> str:
+    """Return the current user's ADK session ID, creating one on first visit."""
+    if "adk_session_id" not in st.session_state:
+        session = asyncio.run(_svc.create_session(app_name="mallpulse", user_id="gm"))
         st.session_state.adk_session_id = session.id
-        st.session_state.adk_runner = Runner(
-            agent=root_agent,
-            app_name="mallpulse",
-            session_service=svc,
-        )
         st.session_state.messages = []
-
-    return st.session_state.adk_runner, st.session_state.adk_session_id
-
-
-runner, session_id = _bootstrap_session()
+    return st.session_state.adk_session_id
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _reset_conversation() -> None:
     """Clear chat history and start a fresh ADK session."""
-    session = asyncio.run(
-        st.session_state.adk_svc.create_session(app_name="mallpulse", user_id="gm")
-    )
+    session = asyncio.run(_svc.create_session(app_name="mallpulse", user_id="gm"))
     st.session_state.adk_session_id = session.id
     st.session_state.messages = []
     st.rerun()
-
-
-def _run_agent(prompt: str) -> str:
-    """
-    Send a prompt through the ADK multi-agent pipeline.
-
-    Uses Runner.run() (sync generator) so we can surface live tool-call
-    status in the UI while the agent thinks.
-
-    Returns the final response text.
-    """
-    status = st.empty()
-    full_text = ""
-
-    try:
-        for event in runner.run(
-            user_id="gm",
-            session_id=st.session_state.adk_session_id,
-            new_message=Content(parts=[Part(text=prompt)], role="user"),
-        ):
-            # Surface tool calls as live status so the user sees progress
-            calls = event.get_function_calls() if hasattr(event, "get_function_calls") else []
-            if calls:
-                tool_names = ", ".join(f"`{c.name}`" for c in calls)
-                status.caption(f"⚙️ Calling {tool_names}…")
-
-            # Capture final response
-            if event.is_final_response() and event.content:
-                for part in event.content.parts:
-                    if part.text:
-                        full_text += part.text
-
-    except Exception as exc:
-        status.empty()
-        return f"⚠️ Something went wrong: {exc}"
-
-    status.empty()
-    return full_text or "_(No response — try rephrasing your question.)_"
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
@@ -179,7 +138,7 @@ st.caption(
 st.divider()
 
 # Render history
-for msg in st.session_state.messages:
+for msg in st.session_state.get("messages", []):
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
@@ -190,15 +149,39 @@ if not prompt and "pending_prompt" in st.session_state:
 
 # Handle new message
 if prompt:
-    # Show user bubble
+    _get_session_id()  # ensure session exists before rendering
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Stream agent response
     with st.chat_message("assistant"):
-        with st.spinner("MallPulse is thinking…"):
-            response = _run_agent(prompt)
-        st.markdown(response)
+        status_slot = st.empty()
+        text_slot = st.empty()
+        full_text = ""
 
-    st.session_state.messages.append({"role": "assistant", "content": response})
+        try:
+            for event in runner.run(
+                user_id="gm",
+                session_id=st.session_state.adk_session_id,
+                new_message=Content(parts=[Part(text=prompt)], role="user"),
+            ):
+                # Surface tool calls as live status
+                calls = event.get_function_calls() if hasattr(event, "get_function_calls") else []
+                if calls:
+                    tool_names = ", ".join(f"`{c.name}`" for c in calls)
+                    status_slot.caption(f"⚙️ Calling {tool_names}…")
+
+                # Stream partial text as it arrives
+                if event.content and event.content.parts:
+                    for part in event.content.parts:
+                        if hasattr(part, "text") and part.text:
+                            full_text += part.text
+                            text_slot.markdown(full_text + " ▌")
+
+        except Exception as exc:
+            full_text = f"⚠️ Something went wrong: {exc}"
+
+        status_slot.empty()
+        text_slot.markdown(full_text or "_(No response — try rephrasing your question.)_")
+
+    st.session_state.messages.append({"role": "assistant", "content": full_text})
