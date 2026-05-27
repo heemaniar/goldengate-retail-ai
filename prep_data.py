@@ -219,8 +219,82 @@ for mall in dim_mall['mall_name']:
         })
 
 dim_tenant = pd.DataFrame(tenants)
+
+# ── 3c) Tenant turnover — SCD Type 2 ─────────────────────────────────────────
+# Real malls see tenant turnover every 3-7 years.  We model two turnover waves:
+#   Cohort 0 (lease expired 2021-12-31): replacement moves in 2022-01-01
+#   Cohort 1 (lease expired 2023-09-30): replacement moves in 2023-10-01
+#
+# Categories with only one brand option (Souvenir) cannot be replaced —
+# those slots stay open-ended.  All other categories cycle to the next brand
+# in the TENANTS pool (deterministic via dhash).
+#
+# effective_from / effective_to: half-open intervals [from, to] stored as dates.
+# is_replacement flag: used in dim_lease to assign fresh 5-year leases.
+
+_COHORT_TENURE = {
+    0: (pd.Timestamp('2018-01-01'), pd.Timestamp('2021-12-31'), pd.Timestamp('2022-01-01')),
+    1: (pd.Timestamp('2020-06-01'), pd.Timestamp('2023-09-30'), pd.Timestamp('2023-10-01')),
+    2: (pd.Timestamp('2020-01-01'), pd.Timestamp('2026-07-06'), None),
+    3: (pd.Timestamp('2021-01-01'), pd.Timestamp('2026-07-06'), None),
+}
+_SCD_END = pd.Timestamp('2026-07-06')
+_mall_name_lu = dim_mall.set_index('mall_id')['mall_name']
+
+orig_rows, repl_rows = [], []
+
+for row in dim_tenant.to_dict('records'):
+    tid       = row['tenant_id']
+    cohort    = dhash(tid, 'cohort') % 4
+    cat       = row['category']
+    mall_id   = row['mall_id']
+    mall_name = _mall_name_lu[mall_id]
+    cat_names = TENANTS[cat]
+
+    eff_from, eff_to, repl_start = _COHORT_TENURE[cohort]
+    gets_replacement = (cohort in (0, 1)) and (len(cat_names) >= 2)
+
+    if not gets_replacement:
+        # No successor — keep slot open through the full sim horizon
+        eff_to = _SCD_END
+
+    row['effective_from'] = eff_from
+    row['effective_to']   = eff_to
+    row['is_replacement'] = False
+    orig_rows.append(row)
+
+    if gets_replacement:
+        orig_idx  = dhash(mall_name, cat) % len(cat_names)
+        repl_name = cat_names[(orig_idx + 1) % len(cat_names)]
+
+        base_sqm  = TENANT_SIZE_BASE[repl_name]
+        mall_mult = MALL_SIZE_MULT[mall_name]
+        variation = 0.88 + (dhash(mall_name, repl_name, 'size') % 25) / 100
+        unit_size = max(8, int(base_sqm * mall_mult * variation))
+
+        # _r suffix avoids ID collision when the same brand is a primary tenant
+        # elsewhere in the portfolio
+        repl_tid = (
+            f't_{repl_name.lower().replace(" ", "_").replace("&", "").replace("__", "_")}'
+            f'_{mall_id}_r'
+        )
+        repl_rows.append({
+            'tenant_id':      repl_tid,
+            'tenant_name':    repl_name,
+            'mall_id':        mall_id,
+            'category':       cat,
+            'subcategory':    TENANT_SUBCATEGORY[repl_name],
+            'unit_size_sqm':  unit_size,
+            'store_format':   TENANT_FORMAT[repl_name],
+            'effective_from': repl_start,
+            'effective_to':   _SCD_END,
+            'is_replacement': True,
+        })
+
+dim_tenant = pd.DataFrame(orig_rows + repl_rows)
 dim_tenant.to_csv(DATA / 'dim_tenant.csv', index=False)
-print(f"  dim_tenant.csv: {len(dim_tenant)} rows")
+print(f"  dim_tenant.csv: {len(dim_tenant)} rows "
+      f"({len(orig_rows)} original + {len(repl_rows)} replacements)")
 
 # ── 3b) Seasonal date resampling ─────────────────────────────────────────────
 # The source CSV dates are uniformly distributed (synthetic origin) — every day
@@ -282,22 +356,43 @@ _weekend_share = (_dow_dist.get('Saturday', 0) + _dow_dist.get('Sunday', 0)) / l
 print(f"    Weekend share after resampling (orig rows): {_weekend_share:.1%} (expected ~27–30%)")
 del _tr_hols, _date_spine, _MONTH_MULT, _wts, _orig_mask, _SIM_CUTOFF
 
-# ── 4) fact_transactions — map raw rows to tenant/mall IDs ──────────────────
+# ── 4) fact_transactions — date-aware tenant lookup ──────────────────────────
+# With SCD Type 2 dim_tenant, the same (mall, category) slot may have multiple
+# tenant rows with non-overlapping effective periods.  We fan-out the join
+# (one interim row per tenant period at that slot) then keep only the row where
+# the transaction date falls within the active tenant's window.
 mall_name_to_id = dict(zip(dim_mall['mall_name'], dim_mall['mall_id']))
-tenant_key = {
-    (r['mall_id'], r['category']): r['tenant_id']
-    for _, r in dim_tenant.iterrows()
-}
+raw['mall_id'] = raw['shopping_mall'].map(mall_name_to_id)
 
-raw['mall_id']    = raw['shopping_mall'].map(mall_name_to_id)
-raw['tenant_id']  = raw.apply(lambda r: tenant_key.get((r['mall_id'], r['category'])), axis=1)
+_tenant_periods = dim_tenant[
+    ['mall_id', 'category', 'tenant_id', 'effective_from', 'effective_to']
+].copy()
+
+# Fan-out: each transaction gets one candidate row per tenant period at its slot
+_raw_merged = raw.merge(_tenant_periods, on=['mall_id', 'category'], how='left')
+
+# Keep only the row where the transaction date is within the active period
+_date_mask = (
+    (_raw_merged['invoice_date'] >= _raw_merged['effective_from']) &
+    (_raw_merged['invoice_date'] <= _raw_merged['effective_to'])
+)
+_raw_matched = _raw_merged[_date_mask].drop(
+    columns=['effective_from', 'effective_to']
+)
+
+_gap_count = len(raw) - len(_raw_matched)
+if _gap_count > 0:
+    print(f"    Note: {_gap_count:,} transactions fell in a vacancy gap — dropped")
 
 # NOTE: the source CSV 'price' column is the LINE TOTAL (quantity × unit_price),
-# not the unit price. Back-derive unit_price by dividing.
+# not the unit price. Computed on raw (for dim_customer in section 5) and on
+# the matched subset (for fact_transactions).
 raw['total_amount'] = raw['price'].round(2)
-raw['unit_price']   = (raw['price'] / raw['quantity']).round(2)
+_raw_matched = _raw_matched.copy()
+_raw_matched['total_amount'] = _raw_matched['price'].round(2)
+_raw_matched['unit_price']   = (_raw_matched['price'] / _raw_matched['quantity']).round(2)
 
-fact_transactions = raw.rename(columns={'invoice_date': 'date'})[[
+fact_transactions = _raw_matched.rename(columns={'invoice_date': 'date'})[[
     'invoice_no', 'tenant_id', 'mall_id', 'customer_id', 'date',
     'category', 'quantity', 'unit_price', 'total_amount', 'payment_method',
 ]]
@@ -408,16 +503,30 @@ def _rent_pct(row):
 
 lease_df['rent_pct_of_sales'] = lease_df.apply(_rent_pct, axis=1)
 
-cohort = lease_df['tenant_id'].apply(lambda t: dhash(t, 'cohort') % 4)
-lease_df['lease_start_date'] = cohort.map({i: v[0] for i, v in enumerate(LEASE_COHORTS)})
-lease_df['lease_end_date']   = cohort.map({i: v[1] for i, v in enumerate(LEASE_COHORTS)})
+# Replacement tenants get a fresh 5-year lease from their effective_from date.
+# Original tenants use the cohort-based schedule unchanged.
+def _assign_lease_dates(row):
+    if row['is_replacement']:
+        start = row['effective_from']
+        end   = start + pd.DateOffset(years=5)
+        return str(start.date()), str(end.date())
+    c = dhash(row['tenant_id'], 'cohort') % 4
+    return LEASE_COHORTS[c][0], LEASE_COHORTS[c][1]
+
+_lease_dates = lease_df.apply(_assign_lease_dates, axis=1, result_type='expand')
+lease_df['lease_start_date'] = _lease_dates[0]
+lease_df['lease_end_date']   = _lease_dates[1]
 
 dim_lease = lease_df[['tenant_id', 'lease_start_date', 'lease_end_date',
                        'monthly_base_rent', 'rent_pct_of_sales']]
 dim_lease.to_csv(DATA / 'dim_lease.csv', index=False)
-print(f"  dim_lease.csv: {len(dim_lease)} rows")
-cohort_dist = cohort.value_counts().sort_index().to_dict()
-print(f"    Lease cohorts: { {LEASE_COHORTS[k][0][:4]+'-'+LEASE_COHORTS[k][1][:4]: v for k,v in cohort_dist.items()} }")
+print(f"  dim_lease.csv: {len(dim_lease)} rows "
+      f"({lease_df['is_replacement'].sum()} replacement leases)")
+_orig_cohort = lease_df[~lease_df['is_replacement']]['tenant_id'].apply(
+    lambda t: dhash(t, 'cohort') % 4
+)
+cohort_dist = _orig_cohort.value_counts().sort_index().to_dict()
+print(f"    Original lease cohorts: { {LEASE_COHORTS[k][0][:4]+'-'+LEASE_COHORTS[k][1][:4]: v for k,v in cohort_dist.items()} }")
 
 # ── 7) dim_date — with Turkish public holidays ───────────────────────────────
 tr = holidays.TR(years=range(2020, 2027))
