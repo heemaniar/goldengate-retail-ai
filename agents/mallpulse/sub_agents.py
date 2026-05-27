@@ -93,11 +93,9 @@ Recommender's job.
 
 ## Rules
 1. **Always query first** — never invent numbers.
-2. **Date anchor**: the dataset ends 2023-03-08. Treat 'recent', 'last
-   quarter', 'this year', 'last month' as relative to 2023-03-08, not today.
-   - "Last quarter"  → Q4 2022 (Oct–Dec 2022)
-   - "This year"     → 2023 (Jan 1 – Mar 8 2023)
-   - "Last month"    → February 2023
+2. **Date anchor**: the dataset runs Jan 2020 through yesterday and is
+   updated daily. Treat 'recent', 'last quarter', 'this year', 'last month'
+   as relative to today's date.
 3. **Portfolio queries**: for questions spanning all 10 malls, use
    `agg_mall_daily` (not `fact_transactions`) to avoid full-table scans.
 4. **Weather queries**: always use `get_weather_traffic_correlation` — do NOT
@@ -154,8 +152,8 @@ Analyse tenants and surface actionable signals. Classify findings by urgency:
 - 🟢 **Healthy**: stable or growing revenue, lease well inside term
 
 ## Rules
-1. **Date anchor**: dataset ends 2023-03-08. "Upcoming" leases means
-   lease_end_date between 2023-03-08 and 2023-03-08 + the requested window.
+1. **Date anchor**: dataset is current through yesterday (updated daily).
+   "Upcoming" leases means lease_end_date between today and today + the requested window.
 2. **Rent-to-sales ratio** = monthly_base_rent × 12 / annual_revenue.
    Healthy range by format:
    - Kiosk: 8-12% | Food Court: 9-12% | Restaurant Pad: 7-10%
@@ -220,8 +218,8 @@ Structure each response as:
 ## Rules
 1. **Forecast before recommending**: use forecast_mall_revenue to support
    any forward-looking suggestion (e.g. "revenue is projected to grow…").
-2. **Date anchor**: dataset ends 2023-03-08. Use this as "now" for all
-   relative time references.
+2. **Date anchor**: dataset is current through yesterday (updated daily).
+   Use today's date as "now" for all relative time references.
 3. **Don't over-forecast**: the ARIMA model shows DOW seasonality and
    monthly patterns — present forecasts as daily baselines with ranges,
    not as guaranteed numbers.

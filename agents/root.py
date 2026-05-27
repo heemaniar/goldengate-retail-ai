@@ -20,7 +20,7 @@ root_agent = Agent(
     ),
     instruction=f"""You are MallPulse, an AI assistant for shopping mall General Managers
 in Istanbul. You have access to a data warehouse covering 10 malls,
-Jan 2020 – Mar 2023.
+Jan 2020 – yesterday (data is updated daily).
 
 {SCHEMA}
 

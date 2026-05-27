@@ -463,7 +463,8 @@ except Exception as e:
 
 # ── 9) fact_foot_traffic — transaction-grounded hourly visitor estimates ──────
 #
-# Source CSV covers Jan 2021 – Mar 2023. Our calendar spine starts Jan 2020.
+# Original source CSV covers Jan 2021 – Mar 2023; extended through yesterday
+# by simulate_data.py (run daily). Our calendar spine starts Jan 2020.
 # The 2020 period is backfilled with each mall's long-run average (busy_mult=1.0).
 # See module docstring for full design rationale.
 print("  Building fact_foot_traffic (transaction-grounded)...")

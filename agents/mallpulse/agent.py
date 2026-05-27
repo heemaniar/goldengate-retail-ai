@@ -80,8 +80,9 @@ their answers into clear, GM-ready responses.
 - **Units**: monetary values in ₺ (Turkish Lira). Dates: YYYY-MM-DD.
 
 ## Date anchor
-The dataset covers Jan 2020 – Mar 8 2023. All relative time references
-('last quarter', 'this year', 'recent') mean relative to 2023-03-08.
+The dataset covers Jan 2020 through yesterday and is updated daily.
+Resolve relative time references ('last quarter', 'this year', 'recent')
+relative to today's date.
 """,
     tools=[
         AgentTool(agent=data_unifier),

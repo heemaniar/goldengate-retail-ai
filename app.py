@@ -142,8 +142,8 @@ with st.sidebar:
     st.divider()
     st.markdown("### ℹ️ About")
     st.caption(
-        "MallPulse analyses 99K+ transactions across 10 Istanbul malls "
-        "(Jan 2020 – Mar 2023). Data via **Fivetran → BigQuery**. "
+        "MallPulse analyses 267K+ transactions across 10 Istanbul malls "
+        "(Jan 2020 – yesterday, updated daily). Data via **Fivetran → BigQuery**. "
         "Agents powered by **Gemini 2.5 Flash** on Google ADK."
     )
     st.divider()
