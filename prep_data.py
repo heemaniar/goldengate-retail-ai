@@ -237,7 +237,13 @@ print(f"  dim_tenant.csv: {len(dim_tenant)} rows")
 # Only the date is redistributed; transaction amounts, customers, and tenant
 # assignments are untouched. Random seed (42) is set globally → reproducible.
 print("  Resampling invoice_date with seasonal weights...")
-_tr_hols    = set(holidays.TR(years=range(2021, 2024)).keys())
+# Only resample the original 2021-2023 rows whose dates are synthetic/uniform.
+# Rows added by simulate_data.py (dates >= 2023-03-09) already carry realistic
+# seasonal dates and must NOT be resampled.
+_SIM_CUTOFF  = pd.Timestamp('2023-03-09')
+_orig_mask   = raw['invoice_date'] < _SIM_CUTOFF
+
+_tr_hols    = set(holidays.TR(years=range(2021, 2027)).keys())
 _date_spine = pd.date_range('2021-01-01', '2023-03-08', freq='D')
 
 _MONTH_MULT = {
@@ -265,15 +271,16 @@ _wts = np.array([_date_wt(d) for d in _date_spine], dtype=float)
 _wts /= _wts.sum()
 
 for _mall in raw['shopping_mall'].unique():
-    _idx     = raw[raw['shopping_mall'] == _mall].index
+    _idx     = raw[_orig_mask & (raw['shopping_mall'] == _mall)].index
     _sampled = np.random.choice(len(_date_spine), size=len(_idx), replace=True, p=_wts)
     raw.loc[_idx, 'invoice_date'] = _date_spine[_sampled]
 
-# Verify the redistribution worked
-_dow_dist = raw.groupby(raw['invoice_date'].dt.day_name()).size()
-_weekend_share = (_dow_dist.get('Saturday', 0) + _dow_dist.get('Sunday', 0)) / len(raw)
-print(f"    Weekend share after resampling: {_weekend_share:.1%} (expected ~27–30%)")
-del _tr_hols, _date_spine, _MONTH_MULT, _wts
+# Verify the redistribution worked (check only original rows)
+_orig_dates   = raw.loc[_orig_mask, 'invoice_date']
+_dow_dist     = _orig_dates.dt.day_name().value_counts()
+_weekend_share = (_dow_dist.get('Saturday', 0) + _dow_dist.get('Sunday', 0)) / len(_orig_dates)
+print(f"    Weekend share after resampling (orig rows): {_weekend_share:.1%} (expected ~27–30%)")
+del _tr_hols, _date_spine, _MONTH_MULT, _wts, _orig_mask, _SIM_CUTOFF
 
 # ── 4) fact_transactions — map raw rows to tenant/mall IDs ──────────────────
 mall_name_to_id = dict(zip(dim_mall['mall_name'], dim_mall['mall_id']))
@@ -413,8 +420,8 @@ cohort_dist = cohort.value_counts().sort_index().to_dict()
 print(f"    Lease cohorts: { {LEASE_COHORTS[k][0][:4]+'-'+LEASE_COHORTS[k][1][:4]: v for k,v in cohort_dist.items()} }")
 
 # ── 7) dim_date — with Turkish public holidays ───────────────────────────────
-tr = holidays.TR(years=range(2020, 2024))
-dates = pd.date_range('2020-01-01', '2023-04-01', freq='D')
+tr = holidays.TR(years=range(2020, 2027))
+dates = pd.date_range('2020-01-01', '2026-07-07', freq='D')
 dim_date = pd.DataFrame({'date': dates})
 dim_date['day_of_week']  = dim_date['date'].dt.day_name()
 dim_date['is_weekend']   = dim_date['date'].dt.weekday >= 5
@@ -432,7 +439,7 @@ print("  Fetching weather from Open-Meteo (this may take a moment)...")
 weather_url = (
     'https://archive-api.open-meteo.com/v1/archive'
     '?latitude=41.0082&longitude=28.9784'
-    '&start_date=2020-01-01&end_date=2023-04-01'
+    '&start_date=2020-01-01&end_date=2026-05-25'
     '&daily=temperature_2m_mean,precipitation_sum,weather_code'
     '&timezone=Europe%2FIstanbul'
 )
@@ -478,8 +485,8 @@ txn_daily = (
     .reset_index()
 )
 
-# ── 9b) Full mall × date spine (Jan 2020 – Apr 2023) ────────────────────────
-all_dates = pd.date_range('2020-01-01', '2023-04-01', freq='D')
+# ── 9b) Full mall × date spine (Jan 2020 – Jul 2026) ────────────────────────
+all_dates = pd.date_range('2020-01-01', '2026-07-07', freq='D')
 spine = pd.MultiIndex.from_product(
     [dim_mall['mall_id'].tolist(), all_dates],
     names=['mall_id', 'date_dt'],
