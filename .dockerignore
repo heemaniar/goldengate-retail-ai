@@ -1,0 +1,44 @@
+# ── MallPulse .dockerignore ───────────────────────────────────────────────────
+# Keep the image lean — exclude local-only, generated, and sensitive files.
+
+# Virtual environment (we install from requirements.txt in the image)
+.venv/
+venv/
+
+# Secrets — never bake credentials into the image
+.env
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Jupyter / data exploration
+*.ipynb
+.ipynb_checkpoints/
+data/
+customer_shopping_data.csv
+
+# Git
+.git/
+.gitignore
+
+# Docs / notes
+*.md
+notes.md
+prompts/
+
+# Tests (not needed at runtime)
+tests/
+
+# Local scripts not needed in container
+load_bigquery.py
+load_postgres.py
+prep_data.py
+run_agent.sh
+deploy.py
+
+# macOS
+.DS_Store

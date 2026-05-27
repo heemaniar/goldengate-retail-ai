@@ -34,7 +34,11 @@ from tools.bigquery_tools import (
 # before we spawn the MCP subprocess.
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
-_MCP_SERVER = str(Path.home() / "code" / "fivetran-mcp" / "server.py")
+# Use the vendored copy so this works both locally and inside the Docker container.
+# Fallback to the original dev path if the vendor copy is absent (old local setup).
+_VENDOR_SERVER = Path(__file__).resolve().parents[2] / "vendors" / "fivetran_mcp_server.py"
+_DEV_SERVER    = Path.home() / "code" / "fivetran-mcp" / "server.py"
+_MCP_SERVER    = str(_VENDOR_SERVER if _VENDOR_SERVER.exists() else _DEV_SERVER)
 
 # Fivetran MCP toolset — read-only pipeline monitoring tools only.
 # FIVETRAN_ALLOW_WRITES is intentionally not set, so write ops are blocked.

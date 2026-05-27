@@ -1,0 +1,28 @@
+# MallPulse — Python dependencies
+# Pinned to match the local .venv so Cloud Run builds deterministically.
+
+# ── UI ────────────────────────────────────────────────────────────────────────
+streamlit==1.57.0
+
+# ── Google ADK + Gemini ───────────────────────────────────────────────────────
+google-adk==1.34.0
+google-genai==1.75.0
+
+# ── GCP / BigQuery ────────────────────────────────────────────────────────────
+google-cloud-bigquery==3.41.0
+google-cloud-bigquery-storage==2.38.0
+pyarrow==24.0.0
+
+# ── MCP (Fivetran MCP server vendor) ─────────────────────────────────────────
+mcp==1.27.1
+httpx==0.28.1
+
+# ── Database (Cloud SQL Postgres) ─────────────────────────────────────────────
+psycopg2-binary==2.9.12
+
+# ── Data processing ───────────────────────────────────────────────────────────
+pandas==3.0.3
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv==1.2.2
+requests==2.34.2
