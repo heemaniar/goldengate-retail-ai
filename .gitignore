@@ -8,3 +8,7 @@ __pycache__/
 data/*.csv
 customer_shopping_data.csv
 *.ipynb_checkpoints
+
+# Local-only submission files
+devpost_submission.md
+demo_script.md
