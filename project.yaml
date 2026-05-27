@@ -1,0 +1,99 @@
+# project.yaml — MallPulse
+# Used by the /review skill to scope and route code reviews.
+
+# ── Identity ─────────────────────────────────────────────────────────────────
+name: "mallpulse"
+description: "Multi-agent mall analytics platform — Google ADK + BigQuery + Streamlit. Diagnoses tenant health, forecasts revenue, and recommends actions for mall GMs."
+owner: "heema"
+
+# ── Tech stack ────────────────────────────────────────────────────────────────
+tech_stack:
+  - python
+  - bigquery
+  - sql
+  - streamlit
+
+# ── Project structure ─────────────────────────────────────────────────────────
+entry_points:
+  - path: "agents/"
+    role: "Google ADK agents — root orchestrator + 3 sub-agents (data_unifier, tenant_diagnoser, action_recommender)"
+  - path: "tools/"
+    role: "BigQuery read-only tools + Fivetran MCP tools"
+  - path: "app.py"
+    role: "Streamlit chat UI with dark theme, sidebar, live tool-call status"
+  - path: "prep_data.py"
+    role: "Synthetic data generation — augments Istanbul Mall dataset"
+  - path: "load_bigquery.py"
+    role: "CSV → BigQuery loader"
+  - path: "load_postgres.py"
+    role: "CSV → Cloud SQL Postgres loader"
+  - path: "deploy.py"
+    role: "Vertex AI Agent Engine deployment script"
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+testing:
+  framework: "pytest"
+  test_dir: "tests/"
+  run_command: "pytest -v"
+  coverage_target: 70
+
+# ── Critical paths ────────────────────────────────────────────────────────────
+critical_paths:
+  - "User asks a revenue question → root agent routes to data_unifier → BQ query executes → markdown table returned to Streamlit"
+  - "User asks tenant health → tenant_diagnoser runs rent-to-sales ratio query → flags at-risk tenants"
+  - "Action recommender calls forecast model → returns prioritised GM action list"
+  - "Fivetran MCP tool connects to Postgres source → syncs to BQ → data_unifier reads fresh data"
+  - "prep_data.py generates synthetic data without NULLs in NOT NULL columns"
+
+# ── Data sources ──────────────────────────────────────────────────────────────
+data_sources:
+  - name: "fact_transactions"
+    type: bigquery
+    location: "mallpulse-hackathon.mallpulse_core.fact_transactions"
+    notes: "Partition key: transaction_date. ~99,458 rows. Never query without date filter."
+  - name: "fact_foot_traffic"
+    type: bigquery
+    location: "mallpulse-hackathon.mallpulse_core.fact_foot_traffic"
+    notes: "WARNING: prep_data.py does NOT generate foot traffic data — table may be empty. Flag any code that queries this without a NULL/empty guard."
+  - name: "dim_tenant"
+    type: bigquery
+    location: "mallpulse-hackathon.mallpulse_core.dim_tenant"
+    notes: "Contains synthetic tenant names — not real business data."
+  - name: "dim_lease"
+    type: bigquery
+    location: "mallpulse-hackathon.mallpulse_core.dim_lease"
+    notes: "Lease dates may overlap — test for duplicate tenant_id per period."
+  - name: "postgres_source"
+    type: postgres
+    location: "Cloud SQL — synced via Fivetran"
+    notes: "Fivetran trial expires June 9 2026 — flag any hard dependency on live sync."
+
+# ── Conventions ───────────────────────────────────────────────────────────────
+conventions:
+  naming:
+    - "snake_case for all Python identifiers"
+    - "dim_ prefix for dimension tables, fact_ for fact tables"
+    - "tools return markdown strings, not dicts, so LLM can reason directly"
+  code_style:
+    - "type hints required on all tool functions"
+    - "max line length 100"
+    - "ADK tools must have a docstring — it becomes the tool description the LLM sees"
+  data_style:
+    - "all BQ queries must filter on partition column (transaction_date / date)"
+    - "never SELECT * — name columns explicitly"
+    - "LIMIT 50 on all markdown-returning queries to avoid context overflow"
+    - "handle empty result sets — return a human-readable 'no data found' string"
+
+# ── Known issues / watch list ─────────────────────────────────────────────────
+known_issues:
+  - "fact_foot_traffic is empty — any query or agent path touching it will silently return 0 rows"
+  - "Fivetran MCP tool has a graceful fallback but fallback path is untested under load"
+  - "deploy.py targets Vertex AI Agent Engine — ADK on Cloud Run may not fully satisfy hackathon 'Agent Builder' requirement"
+  - "Session state in app.py uses st.session_state — test for rerun loops on tool_call status updates"
+
+# ── Environment ───────────────────────────────────────────────────────────────
+environment:
+  python_version: "3.11"
+  cloud_provider: "gcp"
+  deployment_target: "cloud_run"
+  secrets_in: ".env"
