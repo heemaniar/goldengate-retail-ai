@@ -60,7 +60,7 @@ ML model:
   Call forecast_mall_revenue(mall_name, days) — do NOT write raw ML.FORECAST SQL.
   Returns daily revenue forecast with 90% confidence intervals.
 
-Date range: 2020-01-01 through yesterday (data updated daily)
+Date range: 2021-01-01 through yesterday (data updated daily via simulate_data.py)
 Malls: Kanyon, Forum Istanbul, Metrocity, Metropol AVM, Istinye Park,
        Mall of Istanbul, Emaar Square Mall, Cevahir AVM, Viaport Outlet,
        Zorlu Center

@@ -28,6 +28,8 @@ MallPulse is a multi-agent AI system that turns raw retail data into instant, ac
 
 ## Architecture
 
+![MallPulse Architecture](architecture.png)
+
 ```
 User (Streamlit chat UI)
         │
