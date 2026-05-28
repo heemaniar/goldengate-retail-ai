@@ -52,93 +52,118 @@ st.html("""
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 <style>
 /* ── Typography ─────────────────────────────────────────────────────────── */
 html, body, [class*="css"], p, span, div, li, td, th, label,
 .stMarkdown, .stChatMessage { font-family:'Inter',-apple-system,sans-serif !important; }
-h1,h2,h3,h4,h5,h6 { font-family:'Plus Jakarta Sans',sans-serif !important; font-weight:700 !important; }
+h1,h2,h3,h4,h5,h6 { font-family:'Plus Jakarta Sans',sans-serif !important;
+    font-weight:700 !important; color:#1A1735 !important; }
 
-/* ── App background ─────────────────────────────────────────────────────── */
-.stApp, body { background-color:#0D0B1E !important; }
+/* ── App background — Lavender ──────────────────────────────────────────── */
+.stApp, body { background-color:#EEEDFE !important; }
 .main .block-container { padding-top:1.5rem !important; }
 
-/* ── Sidebar ────────────────────────────────────────────────────────────── */
+/* ── Sidebar — stays dark purple ────────────────────────────────────────── */
 [data-testid="stSidebar"] {
-    background:linear-gradient(180deg,#150F2D 0%,#0D0B1E 100%) !important;
-    border-right:1px solid rgba(83,74,183,0.3) !important;
+    background:linear-gradient(180deg,#150F2D 0%,#2D2156 100%) !important;
+    border-right:1px solid rgba(83,74,183,0.35) !important;
 }
 [data-testid="stSidebar"] .block-container { padding-top:1.25rem !important; }
+/* Sidebar text: force light on dark background */
+[data-testid="stSidebar"] .stMarkdown p,
+[data-testid="stSidebar"] .stMarkdown span,
+[data-testid="stSidebar"] .stCaption { color:rgba(244,243,255,0.65) !important; }
 
 /* ── Buttons — primary (Deep Purple gradient) ───────────────────────────── */
 .stButton>button[kind="primary"] {
     background:linear-gradient(135deg,#3C3489 0%,#534AB7 100%) !important;
     color:#fff !important; border:none !important; border-radius:10px !important;
     font-weight:600 !important; font-family:'Inter',sans-serif !important;
-    box-shadow:0 2px 10px rgba(60,52,137,0.35) !important;
+    box-shadow:0 2px 10px rgba(60,52,137,0.25) !important;
     transition:all 0.2s !important;
 }
 .stButton>button[kind="primary"]:hover {
     transform:translateY(-1px) !important;
-    box-shadow:0 6px 20px rgba(83,74,183,0.5) !important;
+    box-shadow:0 6px 20px rgba(83,74,183,0.4) !important;
 }
-/* ── Buttons — secondary ────────────────────────────────────────────────── */
-.stButton>button {
-    background:rgba(60,52,137,0.12) !important;
-    border:1px solid rgba(83,74,183,0.4) !important;
-    border-radius:10px !important; color:rgba(244,243,255,0.85) !important;
+/* ── Buttons — sidebar quick-question buttons (dark bg) ─────────────────── */
+[data-testid="stSidebar"] .stButton>button {
+    background:rgba(60,52,137,0.28) !important;
+    border:1px solid rgba(83,74,183,0.45) !important;
+    border-radius:10px !important; color:rgba(244,243,255,0.88) !important;
     font-family:'Inter',sans-serif !important; font-size:0.85rem !important;
     transition:all 0.15s !important;
 }
-.stButton>button:hover {
-    background:rgba(83,74,183,0.22) !important;
+[data-testid="stSidebar"] .stButton>button:hover {
+    background:rgba(83,74,183,0.4) !important;
     border-color:#534AB7 !important; color:#F4F3FF !important;
 }
+/* ── Buttons — main area (lavender bg) ──────────────────────────────────── */
+.main .stButton>button {
+    background:rgba(60,52,137,0.08) !important;
+    border:1px solid rgba(83,74,183,0.3) !important;
+    border-radius:10px !important; color:#3C3489 !important;
+    font-family:'Inter',sans-serif !important; font-size:0.85rem !important;
+    transition:all 0.15s !important;
+}
+.main .stButton>button:hover {
+    background:rgba(83,74,183,0.14) !important;
+    border-color:#534AB7 !important; color:#1A1735 !important;
+}
 
-/* ── Chat bubbles ───────────────────────────────────────────────────────── */
+/* ── Chat bubbles (on lavender) ─────────────────────────────────────────── */
 [data-testid="stChatMessage"] { border-radius:14px !important; margin-bottom:6px !important; }
 [data-testid="stChatMessage"][data-message-author-role="user"] {
-    background:rgba(60,52,137,0.16) !important;
-    border:1px solid rgba(83,74,183,0.22) !important;
+    background:rgba(60,52,137,0.07) !important;
+    border:1px solid rgba(83,74,183,0.18) !important;
 }
 [data-testid="stChatMessage"][data-message-author-role="assistant"] {
-    background:rgba(29,158,117,0.07) !important;
-    border:1px solid rgba(29,158,117,0.18) !important;
+    background:rgba(255,255,255,0.68) !important;
+    border:1px solid rgba(29,158,117,0.22) !important;
 }
 
 /* ── Chat input ─────────────────────────────────────────────────────────── */
 [data-testid="stChatInputTextArea"] {
-    background:#1A1735 !important; border:1px solid rgba(83,74,183,0.5) !important;
-    border-radius:12px !important; color:#F4F3FF !important;
+    background:rgba(255,255,255,0.82) !important;
+    border:1px solid rgba(83,74,183,0.4) !important;
+    border-radius:12px !important; color:#1A1735 !important;
 }
 [data-testid="stChatInputTextArea"]:focus-within {
-    border-color:#534AB7 !important; box-shadow:0 0 0 2px rgba(83,74,183,0.2) !important;
+    border-color:#534AB7 !important; box-shadow:0 0 0 2px rgba(83,74,183,0.15) !important;
 }
 
 /* ── Expanders ──────────────────────────────────────────────────────────── */
 [data-testid="stExpander"] {
-    background:rgba(26,23,53,0.55) !important;
-    border:1px solid rgba(83,74,183,0.28) !important; border-radius:10px !important;
+    background:rgba(255,255,255,0.55) !important;
+    border:1px solid rgba(83,74,183,0.22) !important; border-radius:10px !important;
 }
-[data-testid="stExpander"] summary { color:rgba(244,243,255,0.75) !important; font-size:0.83rem !important; }
+[data-testid="stExpander"] summary { color:#2D2156 !important; font-size:0.83rem !important; }
 
 /* ── Code ───────────────────────────────────────────────────────────────── */
-code,pre { background:#100E24 !important; border:1px solid rgba(83,74,183,0.22) !important; border-radius:7px !important; }
+code,pre { background:#F0EFFE !important; border:1px solid rgba(83,74,183,0.18) !important; border-radius:7px !important; }
 code { color:#1D9E75 !important; }
 
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+table { background:rgba(255,255,255,0.5) !important; border-radius:8px !important; }
+thead tr { background:rgba(60,52,137,0.08) !important; }
+th { color:#1A1735 !important; font-family:'Plus Jakarta Sans',sans-serif !important; }
+td { color:#1A1735 !important; }
+
 /* ── Dividers ───────────────────────────────────────────────────────────── */
-hr { border-color:rgba(83,74,183,0.2) !important; margin:0.6rem 0 !important; }
+hr { border-color:rgba(83,74,183,0.18) !important; margin:0.6rem 0 !important; }
 
 /* ── Caption / small ────────────────────────────────────────────────────── */
-.stCaption,small { color:rgba(244,243,255,0.48) !important; font-size:0.77rem !important; }
+.stCaption,small { color:rgba(26,23,53,0.5) !important; font-size:0.77rem !important; }
 
 /* ── Spinner ────────────────────────────────────────────────────────────── */
 .stSpinner>div { border-top-color:#1D9E75 !important; }
 
 /* ── Alert card (coral accent) ──────────────────────────────────────────── */
 .alert-card {
-    background:rgba(216,90,48,0.09); border-left:3px solid #D85A30;
+    background:rgba(216,90,48,0.07); border-left:3px solid #D85A30;
     border-radius:0 8px 8px 0; padding:9px 14px; margin-bottom:6px;
-    font-size:0.87rem; font-family:'Inter',sans-serif;
+    font-size:0.87rem; font-family:'Inter',sans-serif; color:#2D2156;
 }
 
 /* ── Tag / badge ────────────────────────────────────────────────────────── */
@@ -148,9 +173,9 @@ hr { border-color:rgba(83,74,183,0.2) !important; margin:0.6rem 0 !important; }
 
 /* ── Scrollbar ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width:5px; height:5px; }
-::-webkit-scrollbar-track { background:#0D0B1E; }
-::-webkit-scrollbar-thumb { background:#3C3489; border-radius:3px; }
-::-webkit-scrollbar-thumb:hover { background:#534AB7; }
+::-webkit-scrollbar-track { background:#EEEDFE; }
+::-webkit-scrollbar-thumb { background:#534AB7; border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:#3C3489; }
 
 /* ── Hide Streamlit chrome ──────────────────────────────────────────────── */
 #MainMenu,footer { visibility:hidden; }
@@ -202,35 +227,43 @@ def _get_session_id() -> str:
 
 
 # ── Proactive anomaly alerts (cached 1 hour) ──────────────────────────────────
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def _get_anomaly_alerts() -> list[str]:
-    """Return tenants with rent-to-sales ratio > 10% in the last 30 days."""
+    """Return top-5 tenants with highest rent-to-sales ratio in the last 30 days."""
     try:
         result = query_warehouse("""
         SELECT
             t.tenant_name,
             m.mall_name,
-            ROUND(l.monthly_base_rent * 12 / NULLIF(SUM(d.revenue), 0) * 100, 1) AS rent_to_sales_pct
+            ROUND(
+                l.monthly_base_rent
+                / NULLIF(SUM(d.revenue) / COUNT(DISTINCT d.date), 0)
+                * 100, 1
+            ) AS rent_to_sales_pct
         FROM `mallpulse-hackathon.mallpulse_core.dim_lease` l
         JOIN `mallpulse-hackathon.mallpulse_core.dim_tenant` t ON t.tenant_id = l.tenant_id
         JOIN `mallpulse-hackathon.mallpulse_core.dim_mall`   m ON m.mall_id = t.mall_id
         JOIN `mallpulse-hackathon.mallpulse_core.agg_tenant_daily` d ON d.tenant_id = t.tenant_id
         WHERE d.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
-          AND t.effective_to IS NULL
+          AND (t.effective_to IS NULL OR t.effective_to >= CURRENT_DATE())
         GROUP BY t.tenant_name, m.mall_name, l.monthly_base_rent
-        HAVING rent_to_sales_pct > 10
+        HAVING rent_to_sales_pct > 15
         ORDER BY rent_to_sales_pct DESC
         LIMIT 5
         """)
-        if "BigQuery error" in result or "no rows" in result.lower():
+        if "BigQuery error" in result or "returned no rows" in result.lower():
             return []
         alerts = []
-        for line in result.strip().split("\n")[2:]:
+        for line in result.strip().split("\n")[2:]:  # skip header + separator rows
             parts = [p.strip() for p in line.split("|") if p.strip()]
             if len(parts) >= 3:
-                alerts.append(
-                    f"🚨 **{parts[0]}** at {parts[1]} — rent-to-sales {parts[2]}%"
-                )
+                try:
+                    pct = float(parts[2])
+                    alerts.append(
+                        f"🚨 **{parts[0]}** at {parts[1]} — rent-to-sales **{pct:.1f}%**"
+                    )
+                except ValueError:
+                    pass
         return alerts
     except Exception:
         return []
@@ -265,7 +298,7 @@ with st.sidebar:
 </div>
 """, unsafe_allow_html=True)
 
-    st.markdown('<p style="font-size:0.72rem;color:rgba(244,243,255,0.45);font-weight:600;letter-spacing:0.8px;text-transform:uppercase;margin:0 0 8px;font-family:\'Inter\',sans-serif;">Quick questions</p>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size:0.72rem;color:#D85A30;font-weight:700;letter-spacing:0.9px;text-transform:uppercase;margin:0 0 8px;font-family:\'Inter\',sans-serif;">Quick questions</p>', unsafe_allow_html=True)
     for label, prompt_text in EXAMPLE_PROMPTS:
         if st.button(label, use_container_width=True, key=f"ex_{label}"):
             st.session_state.pending_prompt = prompt_text
@@ -311,11 +344,11 @@ st.markdown("""
 <div style="display:flex;align-items:center;gap:14px;padding:4px 0 6px;">
   <div style="width:52px;height:52px;background:linear-gradient(135deg,#3C3489 0%,#1D9E75 100%);
        border-radius:14px;display:flex;align-items:center;justify-content:center;
-       font-size:26px;box-shadow:0 4px 18px rgba(60,52,137,0.5);flex-shrink:0;">🏙️</div>
+       font-size:26px;box-shadow:0 4px 18px rgba(60,52,137,0.35);flex-shrink:0;">🏙️</div>
   <div>
     <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:2rem;font-weight:800;
-         color:#F4F3FF;line-height:1.1;letter-spacing:-0.8px;">MallPulse</div>
-    <div style="font-size:0.78rem;color:rgba(244,243,255,0.5);font-weight:500;
+         color:#1A1735;line-height:1.1;letter-spacing:-0.8px;">MallPulse</div>
+    <div style="font-size:0.78rem;color:rgba(26,23,53,0.5);font-weight:500;
          font-family:'Inter',sans-serif;letter-spacing:0.2px;">
       Tenant performance · Revenue trends · Lease health · Forecasts
     </div>
