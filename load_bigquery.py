@@ -1,5 +1,5 @@
 """
-load_bigquery.py — Load all MallPulse CSVs into BigQuery mallpulse_core dataset.
+load_bigquery.py — Load all GoldenGate Retail AI CSVs into BigQuery goldengate_core dataset.
 
 Usage (with venv active):
     python load_bigquery.py
@@ -12,7 +12,7 @@ from pathlib import Path
 from google.cloud import bigquery
 
 PROJECT   = "mallpulse-hackathon"
-DATASET   = "mallpulse_core"
+DATASET   = "goldengate_core"
 DATA      = Path("data")
 
 # Schema overrides for columns that need explicit types
@@ -24,7 +24,7 @@ TABLE_SCHEMAS = {
         bigquery.SchemaField("mall_id",         "STRING"),
         bigquery.SchemaField("category",        "STRING"),
         bigquery.SchemaField("subcategory",     "STRING"),
-        bigquery.SchemaField("unit_size_sqm",   "INTEGER"),
+        bigquery.SchemaField("unit_size_sqm",   "FLOAT64"),
         bigquery.SchemaField("store_format",    "STRING"),
         bigquery.SchemaField("effective_from",  "DATE"),
         bigquery.SchemaField("effective_to",    "DATE"),
@@ -81,6 +81,15 @@ TABLE_SCHEMAS = {
     ],
 }
 
+TABLE_SCHEMAS["forecast_cache"] = [
+    bigquery.SchemaField("mall_id",          "STRING"),
+    bigquery.SchemaField("forecast_date",    "DATE"),
+    bigquery.SchemaField("forecast_revenue", "FLOAT64"),
+    bigquery.SchemaField("lower_90",         "FLOAT64"),
+    bigquery.SchemaField("upper_90",         "FLOAT64"),
+    bigquery.SchemaField("cached_at",        "TIMESTAMP"),
+]
+
 TABLES = [
     "dim_mall",
     "dim_tenant",
@@ -90,6 +99,7 @@ TABLES = [
     "fact_transactions",
     "fact_weather",
     "fact_foot_traffic",
+    "forecast_cache",
 ]
 
 client = bigquery.Client(project=PROJECT)
@@ -160,7 +170,7 @@ for tbl, sql in AGG_SQLS.items():
     rows = client.get_table(f"{dataset_ref}.{tbl}").num_rows
     print(f"{rows:,} rows")
 
-print("\nDone! BigQuery mallpulse_core is ready.")
+print("\nDone! BigQuery goldengate_core is ready.")
 
 # ── Retrain ARIMA_PLUS forecast model ────────────────────────────────────────
 # Must run AFTER agg_mall_daily is rebuilt above.
@@ -176,7 +186,7 @@ _arima_sql = f"""
         auto_arima             = TRUE,
         data_frequency         = 'DAILY',
         decompose_time_series  = TRUE,
-        holiday_region         = 'TR'
+        holiday_region         = 'US'
     )
     AS
     SELECT mall_id, date, total_revenue

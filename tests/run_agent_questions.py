@@ -22,25 +22,25 @@ from agents.mallpulse.agent import root_agent
 
 QUESTIONS = [
     # data_unifier → query_warehouse
-    ("Revenue count",        "How many transactions did Kanyon have in March 2023?"),
+    ("Revenue count",     "How many transactions did Valley Fair have in March 2024?"),
     # data_unifier → get_mall_summary
-    ("Mall summary",         "Give me a summary of Forum Istanbul's overall revenue performance"),
+    ("Mall summary",      "Give me a summary of Stanford Shopping Center's overall revenue performance"),
     # data_unifier → get_weather_traffic_correlation
-    ("Weather impact",       "What was the weather impact on foot traffic at Zorlu Center in 2022?"),
+    ("Weather impact",    "What was the weather impact on foot traffic at Santana Row in 2024?"),
     # data_unifier → portfolio query
-    ("Portfolio compare",    "Which of the 10 malls had the highest total revenue in 2022?"),
+    ("Portfolio compare", "Which of the 13 Bay Area malls had the highest total revenue in 2024?"),
     # tenant_diagnoser → get_top_tenants
-    ("Top tenants",          "Who are the top 5 tenants at Istinye Park by revenue?"),
+    ("Top tenants",       "Who are the top 5 tenants at Stanford Shopping Center by revenue?"),
     # tenant_diagnoser → lease query
-    ("Lease expiry",         "Which tenants have leases expiring in the next 6 months?"),
+    ("Lease expiry",      "Which tenants have leases expiring in the next 6 months?"),
     # tenant_diagnoser → cross-mall brand
-    ("Cross-mall brand",     "How does Zara perform across all malls? Compare revenue."),
+    ("Cross-mall brand",  "How does lululemon perform across all Bay Area malls? Compare revenue."),
     # action_recommender → forecast
-    ("Forecast",             "Forecast revenue for Metrocity for the next 30 days"),
+    ("Forecast",          "Forecast revenue for Valley Fair for the next 30 days"),
     # action_recommender → recommendations
-    ("Actions",              "What are the top 3 actions I should take this week at Kanyon?"),
+    ("Actions",           "What are the top 3 actions I should take this week at Valley Fair?"),
     # data_unifier → demographics
-    ("Demographics",         "What is the customer age breakdown at Mall of Istanbul?"),
+    ("Demographics",      "What is the customer age breakdown at Great Mall?"),
 ]
 
 GREEN = "\033[32m"
@@ -50,13 +50,13 @@ RESET = "\033[0m"
 
 async def main():
     svc     = InMemorySessionService()
-    session = await svc.create_session(app_name="mallpulse", user_id="test")
-    runner  = Runner(agent=root_agent, app_name="mallpulse", session_service=svc)
+    session = await svc.create_session(app_name="goldengate", user_id="test")
+    runner  = Runner(agent=root_agent, app_name="goldengate", session_service=svc)
 
     passed = failed = 0
     for label, question in QUESTIONS:
         # Fresh session per question so they don't bleed context
-        session = await svc.create_session(app_name="mallpulse", user_id="test")
+        session = await svc.create_session(app_name="goldengate", user_id="test")
         print(f"\n{'='*60}")
         print(f"[{label}] {question}")
         try:

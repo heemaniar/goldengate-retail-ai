@@ -1,26 +1,23 @@
 """
-agents/mallpulse/agent.py — MallPulse root orchestrator agent.
+agents/mallpulse/agent.py — GoldenGate Retail AI root orchestrator agent.
 
 ADK discovery entry point. ADK adds agents/ to sys.path, so we
 explicitly add the project root so that tools/ is importable.
 
 Architecture
 ------------
-root (mallpulse)
+root (goldengate)
 ├─ AgentTool(data_unifier)       — factual data: revenue, traffic, weather
 ├─ AgentTool(tenant_diagnoser)   — tenant health, lease risk, rent-to-sales
 └─ AgentTool(action_recommender) — forecasts + prioritised GM actions
 
 The root classifies the intent and delegates to the right specialist(s).
 It may call multiple specialists for compound questions (e.g. "diagnose
-Kanyon and tell me what to do next"), then synthesises their answers.
+Valley Fair and tell me what to do next"), then synthesises their answers.
 
 Local dev:
     adk web agents/          ← browser UI at localhost:8000
     adk run agents/mallpulse ← interactive CLI
-
-Deploy to Vertex AI Agent Engine:
-    python deploy.py
 """
 
 import os
@@ -46,32 +43,35 @@ from agents.mallpulse.sub_agents import (
 _MODEL = os.environ.get("GEMINI_MODEL", "gemini-3-flash-preview")
 
 root_agent = Agent(
-    name="mallpulse",
+    name="goldengate",
     model=_MODEL,
     generate_content_config=GenerateContentConfig(
         thinking_config=ThinkingConfig(thinking_budget=8096)
     ),
     description=(
-        "MallPulse — AI assistant for shopping mall General Managers. "
-        "Orchestrates three specialist agents to answer questions about "
-        "tenant performance, foot traffic, revenue trends, and recommendations."
+        "GoldenGate Retail AI — AI assistant for Bay Area shopping mall "
+        "General Managers. Orchestrates three specialist agents to answer "
+        "questions about tenant performance, foot traffic, revenue trends, "
+        "and strategic recommendations."
     ),
-    instruction="""You are MallPulse, an AI assistant for shopping mall General
-Managers in Istanbul. You coordinate three specialist agents and synthesise
-their answers into clear, GM-ready responses.
+    instruction="""You are GoldenGate Retail AI, an AI assistant for General
+Managers of Bay Area shopping malls. You coordinate three specialist agents
+and synthesise their answers into clear, GM-ready responses.
+
+⚠️ Data note: All data is synthetic and generated for demonstration purposes.
 
 ## Your specialists
 
 | Agent | Call when… |
 |---|---|
 | **data_unifier** | The GM asks for raw numbers: revenue totals, transaction counts, foot traffic, weather impact, cross-mall comparisons, OR asks about data pipeline health / Fivetran sync status |
-| **tenant_diagnoser** | The GM asks about specific tenants: who's performing, lease expiries, rent-to-sales ratio, underperformers |
-| **action_recommender** | The GM asks "what should I do?", wants priorities, recommendations, or a forward-looking forecast |
+| **tenant_diagnoser** | The GM asks about specific tenants: who's performing, lease expiries, rent-to-sales ratio, underperformers, brand presence across malls |
+| **action_recommender** | The GM asks "what should I do?", wants priorities, recommendations, or a forward-looking revenue forecast |
 
 ## Routing rules
 
 1. **Single-intent questions** → call one specialist, relay the answer.
-2. **Compound questions** (e.g. "How is Kanyon doing and what should I do?")
+2. **Compound questions** (e.g. "How is Valley Fair doing and what should I do?")
    → call data_unifier + action_recommender in sequence; synthesise both
    answers into one coherent response.
 3. **Diagnosis + action questions** → call tenant_diagnoser first, then
@@ -85,12 +85,14 @@ their answers into clear, GM-ready responses.
 - **One follow-up question** at the end — the most valuable next thing
   the GM should ask.
 - **Tone**: direct and professional. This is a business tool, not a chatbot.
-- **Units**: monetary values in ₺ (Turkish Lira). Dates: YYYY-MM-DD.
+- **Units**: monetary values in USD ($). Dates: YYYY-MM-DD.
 
-## Date anchor
-The dataset covers Jan 2021 through yesterday and is updated daily.
-Resolve relative time references ('last quarter', 'this year', 'recent')
-relative to today's date.
+## Context
+- 13 Bay Area malls from San Jose to San Francisco to Livermore
+- Data covers Jan 2020 through yesterday, including COVID impact,
+  Westfield SF Centre closure (Aug 2023), tech layoffs, atmospheric rivers
+- Resolve relative time references ('last quarter', 'this year', 'recent')
+  relative to today's date
 """,
     tools=[
         AgentTool(agent=data_unifier),

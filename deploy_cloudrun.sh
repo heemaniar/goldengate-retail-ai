@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ── MallPulse — Cloud Run deploy script ──────────────────────────────────────
+# ── GoldenGate Retail AI — Cloud Run deploy script ───────────────────────────
 # Usage: bash deploy_cloudrun.sh
 #
 # Requires:
@@ -13,8 +13,8 @@ set -euo pipefail
 # ── Config ────────────────────────────────────────────────────────────────────
 PROJECT="mallpulse-hackathon"
 REGION="us-central1"
-SERVICE="mallpulse"
-REPO="mallpulse-repo"
+SERVICE="goldengate"
+REPO="goldengate-repo"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${SERVICE}"
 
 # ── Load .env so we can pass vars to Cloud Run ────────────────────────────────
@@ -35,7 +35,7 @@ gcloud artifacts repositories describe "${REPO}" \
        --project="${PROJECT}" \
        --location="${REGION}" \
        --repository-format=docker \
-       --description="MallPulse container images"
+       --description="GoldenGate Retail AI container images"
 
 # ── 2. Build & push image via Cloud Build (no local Docker needed) ────────────
 echo ""
@@ -64,19 +64,14 @@ gcloud run deploy "${SERVICE}" \
   --set-env-vars="\
 GOOGLE_GENAI_USE_VERTEXAI=${GOOGLE_GENAI_USE_VERTEXAI:-1},\
 GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-mallpulse-hackathon},\
-GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1},\
+GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-global},\
 GCP_PROJECT=${GCP_PROJECT:-mallpulse-hackathon},\
 GCP_REGION=${GCP_REGION:-us-central1},\
-BQ_DATASET=${BQ_DATASET:-mallpulse_core},\
+BQ_DATASET=${BQ_DATASET:-goldengate_core},\
 LOOKER_STUDIO_URL=${LOOKER_STUDIO_URL:-},\
-PG_HOST=${PG_HOST:-},\
-PG_USER=${PG_USER:-postgres},\
-PG_PORT=${PG_PORT:-5432},\
-PG_DB=${PG_DB:-mallpulse},\
 FIVETRAN_API_KEY=${FIVETRAN_API_KEY:-},\
 FIVETRAN_API_SECRET=${FIVETRAN_API_SECRET:-},\
-FIVETRAN_CONNECTOR_ID=${FIVETRAN_CONNECTOR_ID:-},\
-PG_PWD=${PG_PWD:-}"
+FIVETRAN_CONNECTOR_ID=${FIVETRAN_CONNECTOR_ID:-}"
 
 # ── 4. Get the service URL ────────────────────────────────────────────────────
 echo ""

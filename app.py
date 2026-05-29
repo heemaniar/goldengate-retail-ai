@@ -1,17 +1,19 @@
 """
-app.py — MallPulse Streamlit Chat UI.
+app.py — GoldenGate Retail AI Streamlit Chat UI.
 
 Local dev:
     streamlit run app.py
 
 Cloud Run (prod):
-    python deploy.py          # builds image + deploys
+    bash deploy_cloudrun.sh
     OR: streamlit run app.py --server.port 8080
 
 The UI talks directly to the ADK multi-agent system:
-  root → data_unifier (BigQuery + Fivetran MCP)
-       → tenant_diagnoser (BigQuery)
-       → action_recommender (BigQuery + ML forecast)
+  root (goldengate) → data_unifier (BigQuery + Fivetran MCP)
+                    → tenant_diagnoser (BigQuery)
+                    → action_recommender (BigQuery + ML forecast)
+
+⚠️ All data is completely synthetic and generated for demonstration purposes.
 """
 
 import asyncio
@@ -39,8 +41,8 @@ from tools.bigquery_tools import query_warehouse  # noqa: E402
 
 # ── Page config (must be first Streamlit call) ────────────────────────────────
 st.set_page_config(
-    page_title="MallPulse",
-    page_icon="🏙️",
+    page_title="GoldenGate Retail AI",
+    page_icon="🌉",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -185,14 +187,14 @@ hr { border-color:rgba(83,74,183,0.18) !important; margin:0.6rem 0 !important; }
 
 # ── Example prompts ───────────────────────────────────────────────────────────
 EXAMPLE_PROMPTS = [
-    ("↗ Revenue", "How many transactions did Kanyon have in March 2023?"),
-    ("◈ Top tenants", "Who are the top 5 tenants at Forum Istanbul by revenue?"),
-    ("⊘ Leases", "Which tenants have leases expiring in the next 6 months?"),
-    ("⇄ Cross-mall", "Compare Zara's performance across all malls"),
-    ("◌ Weather", "What was the weather impact on foot traffic at Kanyon in 2022?"),
-    ("⊕ Forecast", "Forecast next 30 days revenue for Kanyon"),
-    ("⟳ Pipeline", "Is the Fivetran data pipeline healthy?"),
-    ("◎ Actions", "What are the top 3 actions I should take this week at Kanyon?"),
+    ("↗ Revenue",     "How much revenue did Valley Fair generate last month?"),
+    ("◈ Top tenants", "Who are the top 5 tenants at Stanford Shopping Center by revenue?"),
+    ("⊘ Leases",      "Which tenants have leases expiring in the next 6 months?"),
+    ("⇄ Cross-mall",  "Compare lululemon's performance across all Bay Area malls"),
+    ("◌ Weather",     "What was the weather impact on foot traffic at Santana Row in 2024?"),
+    ("⊕ Forecast",    "Forecast next 30 days revenue for Valley Fair"),
+    ("⟳ Pipeline",    "Is the Fivetran data pipeline healthy?"),
+    ("◎ Actions",     "What are the top 3 actions I should take this week at Valley Fair?"),
 ]
 
 
@@ -202,7 +204,7 @@ EXAMPLE_PROMPTS = [
 @st.cache_resource
 def _get_runner() -> tuple[Runner, InMemorySessionService]:
     svc = InMemorySessionService()
-    r = Runner(agent=root_agent, app_name="mallpulse", session_service=svc)
+    r = Runner(agent=root_agent, app_name="goldengate", session_service=svc)
     return r, svc
 
 
@@ -220,7 +222,7 @@ def _get_session_id() -> str:
     """Return the current user's ADK session ID, creating one on first visit."""
     if "adk_session_id" not in st.session_state:
         session = asyncio.run(
-            _svc.create_session(app_name="mallpulse", user_id=_get_user_id())
+            _svc.create_session(app_name="goldengate", user_id=_get_user_id())
         )
         st.session_state.adk_session_id = session.id
         st.session_state.messages = []
@@ -230,7 +232,7 @@ def _get_session_id() -> str:
 # ── Proactive anomaly alerts (cached 1 hour) ──────────────────────────────────
 @st.cache_data(ttl=3600, show_spinner=False)
 def _get_anomaly_alerts() -> list[str]:
-    """Return top-5 tenants where monthly rent exceeds monthly revenue (high rent burden)."""
+    """Return top-5 tenants where annual rent is highest % of annual revenue."""
     try:
         # Uses 365-day window for stable annual revenue, then compares monthly/monthly.
         # Filters: effective_to >= today (active tenants), annual_rev >= 200K (not sparse).
@@ -239,18 +241,18 @@ def _get_anomaly_alerts() -> list[str]:
         SELECT
             t.tenant_name,
             m.mall_name,
-            CAST(ROUND(l.monthly_base_rent) AS INT64)          AS monthly_rent,
-            CAST(ROUND(a.annual_rev / 12) AS INT64)            AS monthly_rev_avg,
+            CAST(ROUND(l.monthly_base_rent) AS INT64)               AS monthly_rent,
+            CAST(ROUND(a.annual_rev / 12) AS INT64)                 AS monthly_rev_avg,
             ROUND(l.monthly_base_rent * 12 / a.annual_rev * 100, 1) AS rent_to_sales_pct
         FROM (
             SELECT tenant_id, SUM(revenue) AS annual_rev
-            FROM `mallpulse-hackathon.mallpulse_core.agg_tenant_daily`
+            FROM `mallpulse-hackathon.goldengate_core.agg_tenant_daily`
             WHERE date >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)
             GROUP BY tenant_id
         ) a
-        JOIN `mallpulse-hackathon.mallpulse_core.dim_tenant` t ON t.tenant_id = a.tenant_id
-        JOIN `mallpulse-hackathon.mallpulse_core.dim_mall`   m ON m.mall_id = t.mall_id
-        JOIN `mallpulse-hackathon.mallpulse_core.dim_lease`  l ON l.tenant_id = a.tenant_id
+        JOIN `mallpulse-hackathon.goldengate_core.dim_tenant` t ON t.tenant_id = a.tenant_id
+        JOIN `mallpulse-hackathon.goldengate_core.dim_mall`   m ON m.mall_id = t.mall_id
+        JOIN `mallpulse-hackathon.goldengate_core.dim_lease`  l ON l.tenant_id = a.tenant_id
         WHERE t.effective_to >= CURRENT_DATE()
           AND a.annual_rev >= 200000
         ORDER BY rent_to_sales_pct DESC
@@ -263,14 +265,14 @@ def _get_anomaly_alerts() -> list[str]:
             parts = [p.strip() for p in line.split("|") if p.strip()]
             if len(parts) >= 5:
                 try:
-                    name   = parts[0]
-                    mall   = parts[1]
-                    rent   = int(parts[2].replace(",", ""))
-                    rev    = int(parts[3].replace(",", ""))
-                    pct    = float(parts[4])
+                    name = parts[0]
+                    mall = parts[1]
+                    rent = int(parts[2].replace(",", ""))
+                    rev  = int(parts[3].replace(",", ""))
+                    pct  = float(parts[4])
                     alerts.append(
                         f"🚨 **{name}** at {mall} — "
-                        f"rent ₺{rent:,} vs avg rev ₺{rev:,}/mo "
+                        f"rent ${rent:,} vs avg rev ${rev:,}/mo "
                         f"(**{pct:.0f}% rent-to-sales**)"
                     )
                 except (ValueError, IndexError):
@@ -284,7 +286,7 @@ def _get_anomaly_alerts() -> list[str]:
 def _reset_conversation() -> None:
     """Clear chat history and start a fresh ADK session."""
     session = asyncio.run(
-        _svc.create_session(app_name="mallpulse", user_id=_get_user_id())
+        _svc.create_session(app_name="goldengate", user_id=_get_user_id())
     )
     st.session_state.adk_session_id = session.id
     st.session_state.messages = []
@@ -298,12 +300,12 @@ with st.sidebar:
   <div style="display:flex;align-items:center;gap:11px;">
     <div style="width:40px;height:40px;background:linear-gradient(135deg,#3C3489 0%,#1D9E75 100%);
          border-radius:11px;display:flex;align-items:center;justify-content:center;
-         font-size:20px;box-shadow:0 3px 12px rgba(60,52,137,0.45);flex-shrink:0;">🏙️</div>
+         font-size:20px;box-shadow:0 3px 12px rgba(60,52,137,0.45);flex-shrink:0;">🌉</div>
     <div>
       <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:1.05rem;
-           font-weight:800;color:#F4F3FF;line-height:1.15;letter-spacing:-0.3px;">MallPulse</div>
+           font-weight:800;color:#F4F3FF;line-height:1.15;letter-spacing:-0.3px;">GoldenGate Retail AI</div>
       <div style="font-size:0.68rem;color:#1D9E75;font-weight:600;letter-spacing:0.6px;
-           font-family:'Inter',sans-serif;text-transform:uppercase;">Mall Operations Co-Pilot</div>
+           font-family:'Inter',sans-serif;text-transform:uppercase;">Bay Area Retail Intelligence</div>
     </div>
   </div>
 </div>
@@ -319,10 +321,13 @@ with st.sidebar:
 <p style="font-size:0.72rem;color:rgba(244,243,255,0.45);font-weight:600;letter-spacing:0.8px;
 text-transform:uppercase;margin:0 0 6px;font-family:'Inter',sans-serif;">About</p>
 <p style="font-size:0.8rem;color:rgba(244,243,255,0.6);line-height:1.55;font-family:'Inter',sans-serif;margin:0;">
-267K+ transactions · 10 Istanbul malls<br>
-Jan 2021 – yesterday · updated daily<br>
+1M+ transactions · 13 Bay Area malls<br>
+Jan 2020 – yesterday · updated daily<br>
 <span style="color:#1D9E75;font-weight:500;">Fivetran → BigQuery</span> ·
 <span style="color:#534AB7;font-weight:500;">Gemini 3</span> on Google ADK
+</p>
+<p style="font-size:0.72rem;color:rgba(244,243,255,0.3);margin:10px 0 0;font-family:'Inter',sans-serif;font-style:italic;">
+⚠️ All data is synthetic — for demo purposes only.
 </p>
 """, unsafe_allow_html=True)
 
@@ -355,10 +360,10 @@ st.markdown("""
 <div style="display:flex;align-items:center;gap:14px;padding:4px 0 6px;">
   <div style="width:52px;height:52px;background:linear-gradient(135deg,#3C3489 0%,#1D9E75 100%);
        border-radius:14px;display:flex;align-items:center;justify-content:center;
-       font-size:26px;box-shadow:0 4px 18px rgba(60,52,137,0.35);flex-shrink:0;">🏙️</div>
+       font-size:26px;box-shadow:0 4px 18px rgba(60,52,137,0.35);flex-shrink:0;">🌉</div>
   <div>
     <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:2rem;font-weight:800;
-         color:#1A1735;line-height:1.1;letter-spacing:-0.8px;">MallPulse</div>
+         color:#1A1735;line-height:1.1;letter-spacing:-0.8px;">GoldenGate Retail AI</div>
     <div style="font-size:0.78rem;color:rgba(26,23,53,0.5);font-weight:500;
          font-family:'Inter',sans-serif;letter-spacing:0.2px;">
       Tenant performance · Revenue trends · Lease health · Forecasts
@@ -370,13 +375,13 @@ st.markdown("""
 # ── Proactive anomaly alerts ──────────────────────────────────────────────────
 alerts = _get_anomaly_alerts()
 if alerts:
-    st.markdown("**⚠️ Alerts — High rent-to-sales tenants (last 30 days)**")
+    st.markdown("**⚠️ Alerts — High rent-to-sales tenants**")
     for alert in alerts:
         st.markdown(f'<div class="alert-card">{alert}</div>', unsafe_allow_html=True)
 
 st.divider()
 
-_AVATAR = {"user": "🧑‍💼", "assistant": "🏙️"}
+_AVATAR = {"user": "🧑‍💼", "assistant": "🌉"}
 
 # Render history
 for msg in st.session_state.get("messages", []):
@@ -384,7 +389,7 @@ for msg in st.session_state.get("messages", []):
         st.markdown(msg["content"])
 
 # Resolve prompt — chat input OR sidebar example button
-prompt = st.chat_input("Ask about a tenant, mall, or data freshness…")
+prompt = st.chat_input("Ask about Valley Fair, Stanford, Santana Row…")
 if not prompt and "pending_prompt" in st.session_state:
     prompt = st.session_state.pop("pending_prompt")
 
@@ -400,7 +405,7 @@ if prompt:
     with st.chat_message("user", avatar="🧑‍💼"):
         st.markdown(prompt)
 
-    with st.chat_message("assistant", avatar="🏙️"):
+    with st.chat_message("assistant", avatar="🌉"):
         status_slot = st.empty()
         text_slot = st.empty()
         full_text = ""
