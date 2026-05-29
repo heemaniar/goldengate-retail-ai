@@ -53,6 +53,7 @@ st.html("""
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0" rel="stylesheet">
 <style>
 /* ── Typography ─────────────────────────────────────────────────────────── */
 html, body, [class*="css"], p, span, div, li, td, th, label,
@@ -229,25 +230,29 @@ def _get_session_id() -> str:
 # ── Proactive anomaly alerts (cached 1 hour) ──────────────────────────────────
 @st.cache_data(ttl=3600, show_spinner=False)
 def _get_anomaly_alerts() -> list[str]:
-    """Return top-5 tenants with highest rent-to-sales ratio in the last 30 days."""
+    """Return top-5 tenants where monthly rent exceeds monthly revenue (high rent burden)."""
     try:
+        # Uses 365-day window for stable annual revenue, then compares monthly/monthly.
+        # Filters: effective_to >= today (active tenants), annual_rev >= 200K (not sparse).
+        # No threshold — always returns the 5 most stressed tenants.
         result = query_warehouse("""
         SELECT
             t.tenant_name,
             m.mall_name,
-            ROUND(
-                l.monthly_base_rent
-                / NULLIF(SUM(d.revenue) / COUNT(DISTINCT d.date), 0)
-                * 100, 1
-            ) AS rent_to_sales_pct
-        FROM `mallpulse-hackathon.mallpulse_core.dim_lease` l
-        JOIN `mallpulse-hackathon.mallpulse_core.dim_tenant` t ON t.tenant_id = l.tenant_id
+            CAST(ROUND(l.monthly_base_rent) AS INT64)          AS monthly_rent,
+            CAST(ROUND(a.annual_rev / 12) AS INT64)            AS monthly_rev_avg,
+            ROUND(l.monthly_base_rent * 12 / a.annual_rev * 100, 1) AS rent_to_sales_pct
+        FROM (
+            SELECT tenant_id, SUM(revenue) AS annual_rev
+            FROM `mallpulse-hackathon.mallpulse_core.agg_tenant_daily`
+            WHERE date >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)
+            GROUP BY tenant_id
+        ) a
+        JOIN `mallpulse-hackathon.mallpulse_core.dim_tenant` t ON t.tenant_id = a.tenant_id
         JOIN `mallpulse-hackathon.mallpulse_core.dim_mall`   m ON m.mall_id = t.mall_id
-        JOIN `mallpulse-hackathon.mallpulse_core.agg_tenant_daily` d ON d.tenant_id = t.tenant_id
-        WHERE d.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
-          AND (t.effective_to IS NULL OR t.effective_to >= CURRENT_DATE())
-        GROUP BY t.tenant_name, m.mall_name, l.monthly_base_rent
-        HAVING rent_to_sales_pct > 15
+        JOIN `mallpulse-hackathon.mallpulse_core.dim_lease`  l ON l.tenant_id = a.tenant_id
+        WHERE t.effective_to >= CURRENT_DATE()
+          AND a.annual_rev >= 200000
         ORDER BY rent_to_sales_pct DESC
         LIMIT 5
         """)
@@ -256,13 +261,19 @@ def _get_anomaly_alerts() -> list[str]:
         alerts = []
         for line in result.strip().split("\n")[2:]:  # skip header + separator rows
             parts = [p.strip() for p in line.split("|") if p.strip()]
-            if len(parts) >= 3:
+            if len(parts) >= 5:
                 try:
-                    pct = float(parts[2])
+                    name   = parts[0]
+                    mall   = parts[1]
+                    rent   = int(parts[2].replace(",", ""))
+                    rev    = int(parts[3].replace(",", ""))
+                    pct    = float(parts[4])
                     alerts.append(
-                        f"🚨 **{parts[0]}** at {parts[1]} — rent-to-sales **{pct:.1f}%**"
+                        f"🚨 **{name}** at {mall} — "
+                        f"rent ₺{rent:,} vs avg rev ₺{rev:,}/mo "
+                        f"(**{pct:.0f}% rent-to-sales**)"
                     )
-                except ValueError:
+                except (ValueError, IndexError):
                     pass
         return alerts
     except Exception:
