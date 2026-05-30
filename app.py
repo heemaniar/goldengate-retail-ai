@@ -207,7 +207,7 @@ EXAMPLE_PROMPTS = [
     ("◈ Top tenants", "Who are the top 5 tenants at Stanford Shopping Center by revenue?"),
     ("⊘ Leases",      "Which tenants have leases expiring in the next 6 months?"),
     ("⇄ Cross-mall",  "Compare lululemon's performance across all Bay Area malls"),
-    ("◌ Weather",     "What was the weather impact on foot traffic at Santana Row in 2024?"),
+    ("◌ Weather",     "What was the weather impact on foot traffic at Santana Row last quarter?"),
     ("⊕ Forecast",    "Forecast next 30 days revenue for Valley Fair"),
     ("⟳ Pipeline",    "Is the Fivetran data pipeline healthy?"),
     ("◎ Actions",     "What are the top 3 actions I should take this week at Valley Fair?"),

@@ -4,23 +4,14 @@ sub_agents.py — Three specialist ADK agents for MallPulse.
 Imported by agent.py and wired into the root orchestrator via AgentTool.
 Each agent has a narrow scope and a curated tool set — the root agent decides
 which specialist(s) to call based on the GM's question.
-
-Day 9: data_unifier now includes the official Fivetran MCP server toolset
-(McpToolset → StdioConnectionParams) for live pipeline monitoring.
 """
 
 import os
-import sys
 from datetime import date as _date
 from pathlib import Path
 
 from dotenv import load_dotenv
 from google.adk.agents import Agent
-from google.adk.tools.mcp_tool.mcp_toolset import (
-    McpToolset,
-    StdioConnectionParams,
-    StdioServerParameters,
-)
 from google.genai.types import GenerateContentConfig, ThinkingConfig
 
 # Gemini 3 Flash Preview (global) — set GEMINI_MODEL=gemini-2.5-flash to fall back
@@ -35,50 +26,17 @@ _TODAY = _date.today().isoformat()  # e.g. "2026-05-29"
 _NO_THINK  = GenerateContentConfig(thinking_config=ThinkingConfig(thinking_budget=0))
 _LITE_THINK = GenerateContentConfig(thinking_config=ThinkingConfig(thinking_budget=1024))
 
+# Load .env so FIVETRAN_API_KEY / FIVETRAN_API_SECRET are in the environment.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
 from tools.bigquery_tools import (
     SCHEMA,
+    check_fivetran_pipeline,
     forecast_mall_revenue,
     get_mall_summary,
     get_top_tenants,
     get_weather_traffic_correlation,
     query_warehouse,
-)
-
-# Load .env so FIVETRAN_API_KEY / FIVETRAN_API_SECRET are in the environment
-# before we spawn the MCP subprocess.
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
-
-# Use the vendored copy so this works both locally and inside the Docker container.
-# Fallback to the original dev path if the vendor copy is absent (old local setup).
-_VENDOR_SERVER = Path(__file__).resolve().parents[2] / "vendors" / "fivetran_mcp_server.py"
-_DEV_SERVER    = Path.home() / "code" / "fivetran-mcp" / "server.py"
-_MCP_SERVER    = str(_VENDOR_SERVER if _VENDOR_SERVER.exists() else _DEV_SERVER)
-
-# Fivetran MCP toolset — read-only pipeline monitoring tools only.
-# FIVETRAN_ALLOW_WRITES is intentionally not set, so write ops are blocked.
-fivetran_mcp = McpToolset(
-    connection_params=StdioConnectionParams(
-        server_params=StdioServerParameters(
-            command=sys.executable,
-            args=[_MCP_SERVER],
-            env={
-                **os.environ,
-                "FIVETRAN_API_KEY": os.getenv("FIVETRAN_API_KEY", ""),
-                "FIVETRAN_API_SECRET": os.getenv("FIVETRAN_API_SECRET", ""),
-                # Write ops OFF — agent must not trigger syncs or modify connections
-                "FIVETRAN_ALLOW_WRITES": "false",
-            },
-        ),
-        timeout=30.0,
-    ),
-    # Expose only the read-only pipeline-monitoring tools to the agent
-    tool_filter=[
-        "get_account_info",
-        "list_connections",
-        "get_connection_details",
-        "get_connection_state",
-        "get_connection_schema_config",
-    ],
 )
 
 # ── 1) Data Unifier ───────────────────────────────────────────────────────────
@@ -92,7 +50,7 @@ data_unifier = Agent(
     description=(
         "Retrieves and presents Bay Area mall data: revenue, transactions, "
         "foot traffic, weather impact, cross-mall comparisons, AND live Fivetran "
-        "pipeline health (sync status, data freshness via official Fivetran MCP). "
+        "pipeline health (sync status, data freshness). "
         "Call this agent for any factual data question or pipeline-health question."
     ),
     instruction=f"""You are the GoldenGate Data Analyst — a specialist in pulling
@@ -127,8 +85,8 @@ Recommender's job.
 8. **Units**: monetary values are USD ($). Dates: YYYY-MM-DD.
 9. **Westfield SF**: mall_id = 'm04' — this mall closed Aug 15, 2023.
    Revenue drops to zero from that date. Treat as a closed mall.
-10. **Pipeline questions**: Call `list_connections`, `get_connection_details`,
-    `get_connection_state` — never guess sync times.
+10. **Pipeline questions**: Call `check_fivetran_pipeline` — never guess sync times.
+    It returns connector status, last sync time, and any warnings.
 
 ## What you cover
 - Revenue and transaction counts (by mall, category, period)
@@ -143,7 +101,7 @@ Recommender's job.
         query_warehouse,
         get_mall_summary,
         get_weather_traffic_correlation,
-        fivetran_mcp,   # official Fivetran MCP server — live pipeline monitoring
+        check_fivetran_pipeline,   # direct REST call — pipeline health & sync status
     ],
 )
 

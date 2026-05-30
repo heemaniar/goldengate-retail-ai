@@ -56,7 +56,7 @@ root_agent = Agent(
         "questions about tenant performance, foot traffic, revenue trends, "
         "and strategic recommendations."
     ),
-    instruction="""You are GoldenGate Retail AI, an AI assistant for General
+    instruction=f"""You are GoldenGate Retail AI, an AI assistant for General
 Managers of Bay Area shopping malls. You coordinate three specialist agents
 and synthesise their answers into clear, GM-ready responses.
 

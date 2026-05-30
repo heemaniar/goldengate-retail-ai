@@ -9,8 +9,11 @@ demonstration purposes only. Revenue figures, transaction data, and
 performance metrics are fictitious.
 """
 
+import os
 import re
+from datetime import datetime, timezone
 
+import requests
 from google.cloud import bigquery
 
 PROJECT = "mallpulse-hackathon"
@@ -242,3 +245,163 @@ def forecast_mall_revenue(mall_name: str, days: int = 30) -> str:
     LIMIT {days}
     """
     return query_warehouse(live_sql)
+
+
+# ── Fivetran pipeline health ──────────────────────────────────────────────────
+
+_FIVETRAN_BASE = "https://api.fivetran.com/v1"
+
+
+def _fivetran_auth() -> tuple[str, str] | None:
+    key    = os.environ.get("FIVETRAN_API_KEY", "")
+    secret = os.environ.get("FIVETRAN_API_SECRET", "")
+    if not key or not secret:
+        return None
+    return (key, secret)
+
+
+def check_fivetran_pipeline() -> str:
+    """Check the health of the Fivetran data pipeline syncing into BigQuery.
+
+    Returns a plain-text summary of all Fivetran connectors: their sync state,
+    last successful sync time, schedule frequency, and any errors.
+    """
+    auth = _fivetran_auth()
+    if not auth:
+        return "Fivetran credentials not configured (FIVETRAN_API_KEY / FIVETRAN_API_SECRET missing)."
+
+    connector_id = os.environ.get("FIVETRAN_CONNECTOR_ID", "")
+
+    # --- List all connectors in the account ---
+    try:
+        group_resp = requests.get(f"{_FIVETRAN_BASE}/groups", auth=auth, timeout=10)
+        group_resp.raise_for_status()
+        groups = group_resp.json().get("data", {}).get("items", [])
+    except Exception as e:
+        return f"Fivetran API error (groups): {e}"
+
+    lines: list[str] = ["## Fivetran Pipeline Health\n"]
+
+    for group in groups:
+        gid   = group["id"]
+        gname = group.get("name", gid)
+
+        try:
+            conn_resp = requests.get(
+                f"{_FIVETRAN_BASE}/groups/{gid}/connectors", auth=auth, timeout=10
+            )
+            conn_resp.raise_for_status()
+            connectors = conn_resp.json().get("data", {}).get("items", [])
+        except Exception as e:
+            lines.append(f"- Group **{gname}**: API error — {e}")
+            continue
+
+        for c in connectors:
+            cid      = c.get("id", "?")
+            service  = c.get("service", "?")
+            schema   = c.get("schema", "?")
+            status   = c.get("status", {})
+            sync_st  = status.get("sync_state", "unknown")
+            setup_st = status.get("setup_state", "unknown")
+            update_st = status.get("update_state", "unknown")
+            paused   = c.get("paused", False)
+            freq_min = c.get("sync_frequency", "?")
+            succeeded_at = c.get("succeeded_at") or "never"
+            failed_at    = c.get("failed_at")
+            warnings     = status.get("warnings", [])
+            tasks        = status.get("tasks", [])
+
+            # Compute data freshness
+            freshness = ""
+            if succeeded_at and succeeded_at != "never":
+                try:
+                    last = datetime.fromisoformat(succeeded_at.replace("Z", "+00:00"))
+                    age  = datetime.now(timezone.utc) - last
+                    h, m = divmod(int(age.total_seconds() // 60), 60)
+                    freshness = f" — last sync **{h}h {m}m ago**"
+                except Exception:
+                    freshness = f" — last sync {succeeded_at}"
+
+            # Health icon
+            if paused:
+                icon = "⏸️"
+            elif failed_at and (not succeeded_at or failed_at > succeeded_at):
+                icon = "🔴"
+            elif update_st == "delayed":
+                icon = "🟡"
+            else:
+                icon = "🟢"
+
+            lines.append(
+                f"{icon} **{service}** (schema: `{schema}`, id: `{cid}`)\n"
+                f"  - Setup: {setup_st} | Sync: {sync_st} | Updates: {update_st}"
+                f"{' | ⏸ PAUSED' if paused else ''}\n"
+                f"  - Frequency: every {freq_min} min{freshness}"
+            )
+            if failed_at:
+                lines.append(f"  - 🔴 Last failure: {failed_at}")
+            if warnings:
+                for w in warnings[:3]:
+                    lines.append(f"  - ⚠️ {w.get('message', w)}")
+            if tasks:
+                for t in tasks[:3]:
+                    lines.append(f"  - 📋 {t.get('message', t)}")
+
+    if not lines or len(lines) == 1:
+        # Fallback: check the single connector ID if present
+        if connector_id:
+            return _check_single_connector(auth, connector_id)
+        return "No Fivetran connectors found in this account."
+
+    return "\n".join(lines)
+
+
+def _check_single_connector(auth: tuple[str, str], connector_id: str) -> str:
+    """Fallback: check one connector by ID when group listing returns nothing."""
+    try:
+        r = requests.get(f"{_FIVETRAN_BASE}/connectors/{connector_id}", auth=auth, timeout=10)
+        r.raise_for_status()
+        c = r.json().get("data", {})
+    except Exception as e:
+        return f"Fivetran API error: {e}"
+
+    service      = c.get("service", "?")
+    schema       = c.get("schema", "?")
+    status       = c.get("status", {})
+    sync_st      = status.get("sync_state", "unknown")
+    setup_st     = status.get("setup_state", "unknown")
+    update_st    = status.get("update_state", "unknown")
+    paused       = c.get("paused", False)
+    freq_min     = c.get("sync_frequency", "?")
+    succeeded_at = c.get("succeeded_at") or "never"
+    failed_at    = c.get("failed_at")
+
+    freshness = ""
+    if succeeded_at != "never":
+        try:
+            last = datetime.fromisoformat(succeeded_at.replace("Z", "+00:00"))
+            age  = datetime.now(timezone.utc) - last
+            h, m = divmod(int(age.total_seconds() // 60), 60)
+            freshness = f"Last successful sync: **{h}h {m}m ago** ({succeeded_at})"
+        except Exception:
+            freshness = f"Last successful sync: {succeeded_at}"
+
+    icon = "⏸️" if paused else ("🔴" if failed_at else "🟢")
+    lines = [
+        f"## Fivetran Pipeline Health\n",
+        f"{icon} **{service}** (schema: `{schema}`, id: `{connector_id}`)",
+        f"- Setup: **{setup_st}** | Sync: **{sync_st}** | Updates: **{update_st}**",
+        f"- Frequency: every **{freq_min} minutes**",
+    ]
+    if freshness:
+        lines.append(f"- {freshness}")
+    if failed_at:
+        lines.append(f"- 🔴 Last failure: {failed_at}")
+    if paused:
+        lines.append(f"- ⏸️ Pipeline is **paused**")
+    for w in status.get("warnings", [])[:3]:
+        lines.append(f"- ⚠️ {w.get('message', w)}")
+    for t in status.get("tasks", [])[:3]:
+        lines.append(f"- 📋 {t.get('message', t)}")
+
+    return "\n".join(lines)
