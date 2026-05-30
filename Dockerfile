@@ -1,4 +1,4 @@
-# ── MallPulse — Cloud Run container ──────────────────────────────────────────
+# ── GoldenGate Retail AI — Cloud Run container ───────────────────────────────
 # Runs the Streamlit chat UI on port 8080.
 # Auth to GCP (BigQuery, Vertex AI) is provided automatically by the
 # Cloud Run service account via Application Default Credentials — no key file
@@ -30,10 +30,14 @@ ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ENV STREAMLIT_SERVER_HEADLESS=true
 ENV STREAMLIT_SERVER_ENABLE_CORS=false
 ENV STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION=false
+# Required for WebSocket to work through Cloud Run's HTTP/2 proxy
+ENV STREAMLIT_SERVER_ENABLE_WEBSOCKET_COMPRESSION=false
 
 EXPOSE 8080
 
 CMD ["streamlit", "run", "app.py", \
      "--server.port=8080", \
      "--server.address=0.0.0.0", \
-     "--server.headless=true"]
+     "--server.headless=true", \
+     "--server.enableWebsocketCompression=false", \
+     "--server.enableCORS=false"]
