@@ -193,6 +193,17 @@ hr { border-color:rgba(83,74,183,0.18) !important; margin:0.6rem 0 !important; }
     border-color:#1D9E75 !important;
 }
 
+/* ── Sidebar selectbox (mall filter) ───────────────────────────────────── */
+[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div {
+    background:#fff !important;
+    border:1px solid rgba(60,52,137,0.35) !important;
+    border-radius:9px !important;
+    color:#3C3489 !important;
+    font-family:'Inter',sans-serif !important;
+    font-size:0.85rem !important;
+}
+[data-testid="stSidebar"] [data-testid="stSelectbox"] svg { fill:#3C3489 !important; }
+
 /* ── Scrollbar ──────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width:5px; height:5px; }
 ::-webkit-scrollbar-track { background:#EEEDFE; }
@@ -204,17 +215,55 @@ hr { border-color:rgba(83,74,183,0.18) !important; margin:0.6rem 0 !important; }
 </style>
 """)
 
-# ── Example prompts ───────────────────────────────────────────────────────────
-EXAMPLE_PROMPTS = [
-    ("↗ Revenue",     "How much revenue did Valley Fair generate last month?"),
-    ("◈ Top tenants", "Who are the top 5 tenants at Stanford Shopping Center by revenue?"),
-    ("⊘ Leases",      "Which tenants have leases expiring in the next 6 months?"),
-    ("⇄ Cross-mall",  "Compare lululemon's performance across all Bay Area malls"),
-    ("◌ Weather",     "What was the weather impact on foot traffic at Santana Row last quarter?"),
-    ("⊕ Forecast",    "Forecast next 30 days revenue for Valley Fair"),
-    ("⟳ Pipeline",    "Is the Fivetran data pipeline healthy?"),
-    ("◎ Actions",     "What are the top 3 actions I should take this week at Valley Fair?"),
+# ── Mall selector ────────────────────────────────────────────────────────────
+MALL_OPTIONS = [
+    "— All Malls —",
+    "Westfield Valley Fair",
+    "Stanford Shopping Center",
+    "Santana Row",
+    "Stonestown Galleria",
+    "Bay Street Emeryville",
+    "Great Mall",
+    "Hillsdale Shopping Center",
+    "Stoneridge Shopping Center",
+    "Broadway Plaza",
+    "Sunvalley Shopping Center",
+    "Westfield Oakridge",
+    "San Francisco Premium Outlets",
+    "Westfield San Francisco Centre (historical)",
 ]
+
+
+def _make_prompts(mall: str) -> list[tuple[str, str]]:
+    """Return sidebar quick-question prompts scoped to the selected mall.
+    When 'All Malls' is selected each question targets a different mall so
+    the set stays varied and interesting.
+    """
+    if mall and mall != "— All Malls —":
+        # All questions scoped to the chosen mall
+        m = mall.replace(" (historical)", "")
+        return [
+            ("↗ Revenue",     f"How much revenue did {m} generate last month?"),
+            ("◈ Top tenants", f"Who are the top 5 tenants at {m} by revenue?"),
+            ("⊘ Leases",      f"Which tenants at {m} have leases expiring in the next 6 months?"),
+            ("⇄ Cross-mall",  f"How does {m} compare to other Bay Area malls this year?"),
+            ("◌ Weather",     f"What was the weather impact on foot traffic at {m} last quarter?"),
+            ("⊕ Forecast",    f"Forecast next 30 days revenue for {m}"),
+            ("⟳ Pipeline",    "Is the Fivetran data pipeline healthy?"),
+            ("◎ Actions",     f"What are the top 3 actions I should take this week at {m}?"),
+        ]
+    else:
+        # No filter — spread across different malls to keep variety
+        return [
+            ("↗ Revenue",     "How much revenue did Westfield Valley Fair generate last month?"),
+            ("◈ Top tenants", "Who are the top 5 tenants at Stanford Shopping Center by revenue?"),
+            ("⊘ Leases",      "Which tenants at Santana Row have leases expiring in the next 6 months?"),
+            ("⇄ Cross-mall",  "Compare lululemon's performance across all Bay Area malls"),
+            ("◌ Weather",     "What was the weather impact on foot traffic at Bay Street Emeryville last quarter?"),
+            ("⊕ Forecast",    "Forecast next 30 days revenue for Broadway Plaza"),
+            ("⟳ Pipeline",    "Is the Fivetran data pipeline healthy?"),
+            ("◎ Actions",     "What are the top 3 actions I should take this week at Stoneridge Shopping Center?"),
+        ]
 
 
 # ── Runner bootstrap (cached across reruns and users) ─────────────────────────
@@ -331,8 +380,31 @@ with st.sidebar:
 </div>
 """, unsafe_allow_html=True)
 
+    # ── Mall filter ───────────────────────────────────────────────────────────
+    st.markdown('<p style="font-size:0.72rem;color:#D85A30;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin:0 0 6px;font-family:\'Inter\',sans-serif;">Filter by Mall</p>', unsafe_allow_html=True)
+    selected_mall = st.selectbox(
+        "mall_selector",
+        options=MALL_OPTIONS,
+        index=0,
+        label_visibility="collapsed",
+        key="selected_mall",
+    )
+
+    # Subtle badge when a mall is active
+    if selected_mall != "— All Malls —":
+        mall_display = selected_mall.replace(" (historical)", " 🔒")
+        st.markdown(
+            f'<div style="background:rgba(60,52,137,0.1);border:1px solid rgba(60,52,137,0.25);'
+            f'border-radius:7px;padding:4px 10px;font-size:0.75rem;color:#3C3489;'
+            f'font-family:\'Inter\',sans-serif;margin-bottom:8px;">📍 {mall_display}</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
     st.markdown('<p style="font-size:0.72rem;color:#D85A30;font-weight:700;letter-spacing:0.9px;text-transform:uppercase;margin:0 0 8px;font-family:\'Inter\',sans-serif;">Quick questions</p>', unsafe_allow_html=True)
-    for label, prompt_text in EXAMPLE_PROMPTS:
+
+    _prompts = _make_prompts(selected_mall)
+    for label, prompt_text in _prompts:
         if st.button(label, use_container_width=True, key=f"ex_{label}"):
             st.session_state.pending_prompt = prompt_text
 
