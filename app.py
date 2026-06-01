@@ -67,16 +67,16 @@ h1,h2,h3,h4,h5,h6 { font-family:'Plus Jakarta Sans',sans-serif !important;
 .stApp, body { background-color:#EEEDFE !important; }
 .main .block-container { padding-top:1.5rem !important; }
 
-/* ── Sidebar — stays dark purple ────────────────────────────────────────── */
+/* ── Sidebar — light lavender ────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
-    background:linear-gradient(180deg,#150F2D 0%,#2D2156 100%) !important;
-    border-right:1px solid rgba(83,74,183,0.35) !important;
+    background:#E8E6FC !important;
+    border-right:1px solid rgba(60,52,137,0.15) !important;
 }
 [data-testid="stSidebar"] .block-container { padding-top:1.25rem !important; }
-/* Sidebar text: force light on dark background */
+/* Sidebar text: dark on light background */
 [data-testid="stSidebar"] .stMarkdown p,
 [data-testid="stSidebar"] .stMarkdown span,
-[data-testid="stSidebar"] .stCaption { color:rgba(244,243,255,0.65) !important; }
+[data-testid="stSidebar"] .stCaption { color:#3C3489 !important; }
 
 /* ── Buttons — primary (Deep Purple gradient) ───────────────────────────── */
 .stButton>button[kind="primary"] {
@@ -90,17 +90,20 @@ h1,h2,h3,h4,h5,h6 { font-family:'Plus Jakarta Sans',sans-serif !important;
     transform:translateY(-1px) !important;
     box-shadow:0 6px 20px rgba(83,74,183,0.4) !important;
 }
-/* ── Buttons — sidebar quick-question buttons (dark bg) ─────────────────── */
+/* ── Buttons — sidebar quick-question buttons (light bg) ────────────────── */
 [data-testid="stSidebar"] .stButton>button {
-    background:rgba(60,52,137,0.28) !important;
-    border:1px solid rgba(83,74,183,0.45) !important;
-    border-radius:10px !important; color:rgba(244,243,255,0.88) !important;
+    background:#3C3489 !important;
+    border:1px solid #3C3489 !important;
+    border-radius:10px !important; color:#FFFFFF !important;
     font-family:'Inter',sans-serif !important; font-size:0.85rem !important;
+    font-weight:500 !important;
     transition:all 0.15s !important;
 }
 [data-testid="stSidebar"] .stButton>button:hover {
-    background:rgba(83,74,183,0.4) !important;
-    border-color:#534AB7 !important; color:#F4F3FF !important;
+    background:#2D2568 !important;
+    border-color:#2D2568 !important; color:#FFFFFF !important;
+    transform:translateY(-1px) !important;
+    box-shadow:0 4px 12px rgba(60,52,137,0.3) !important;
 }
 /* ── Buttons — main area (lavender bg) ──────────────────────────────────── */
 .main .stButton>button {
@@ -174,16 +177,16 @@ hr { border-color:rgba(83,74,183,0.18) !important; margin:0.6rem 0 !important; }
 .tag-coral { color:#D85A30; font-weight:600; }
 .tag-purple{ color:#534AB7; font-weight:600; }
 
-/* ── Toggle — make visible on dark sidebar ──────────────────────────────── */
+/* ── Toggle — visible on light sidebar ──────────────────────────────────── */
 [data-testid="stSidebar"] [data-testid="stToggle"] label {
-    color:rgba(244,243,255,0.88) !important;
+    color:#3C3489 !important;
 }
 [data-testid="stSidebar"] [data-testid="stToggle"] p {
-    color:rgba(244,243,255,0.88) !important;
+    color:#3C3489 !important;
 }
 [data-testid="stSidebar"] [role="switch"] {
-    background-color:rgba(83,74,183,0.5) !important;
-    border:1px solid rgba(83,74,183,0.8) !important;
+    background-color:rgba(60,52,137,0.3) !important;
+    border:1px solid rgba(60,52,137,0.5) !important;
 }
 [data-testid="stSidebar"] [role="switch"][aria-checked="true"] {
     background-color:#1D9E75 !important;
@@ -320,7 +323,7 @@ with st.sidebar:
          font-size:20px;box-shadow:0 3px 12px rgba(60,52,137,0.45);flex-shrink:0;">🌉</div>
     <div>
       <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:1.05rem;
-           font-weight:800;color:#F4F3FF;line-height:1.15;letter-spacing:-0.3px;">GoldenGate Retail AI</div>
+           font-weight:800;color:#3C3489;line-height:1.15;letter-spacing:-0.3px;">GoldenGate Retail AI</div>
       <div style="font-size:0.68rem;color:#1D9E75;font-weight:600;letter-spacing:0.6px;
            font-family:'Inter',sans-serif;text-transform:uppercase;">Bay Area Retail Intelligence</div>
     </div>
@@ -335,15 +338,15 @@ with st.sidebar:
 
     st.divider()
     st.markdown("""
-<p style="font-size:0.72rem;color:rgba(244,243,255,0.45);font-weight:600;letter-spacing:0.8px;
+<p style="font-size:0.72rem;color:#D85A30;font-weight:700;letter-spacing:0.8px;
 text-transform:uppercase;margin:0 0 6px;font-family:'Inter',sans-serif;">About</p>
-<p style="font-size:0.8rem;color:rgba(244,243,255,0.6);line-height:1.55;font-family:'Inter',sans-serif;margin:0;">
+<p style="font-size:0.8rem;color:#3C3489;line-height:1.55;font-family:'Inter',sans-serif;margin:0;">
 1M+ transactions · 13 Bay Area malls<br>
 Jan 2020 – yesterday · updated daily<br>
-<span style="color:#1D9E75;font-weight:500;">Fivetran → BigQuery</span> ·
-<span style="color:#534AB7;font-weight:500;">Gemini 3</span> on Google ADK
+<span style="color:#1D9E75;font-weight:600;">Fivetran → BigQuery</span> ·
+<span style="color:#1D9E75;font-weight:600;">Gemini 3</span> on Google ADK
 </p>
-<p style="font-size:0.72rem;color:rgba(244,243,255,0.3);margin:10px 0 0;font-family:'Inter',sans-serif;font-style:italic;">
+<p style="font-size:0.72rem;color:rgba(60,52,137,0.5);margin:10px 0 0;font-family:'Inter',sans-serif;font-style:italic;">
 ⚠️ All data is synthetic — for demo purposes only.
 </p>
 """, unsafe_allow_html=True)
@@ -351,7 +354,7 @@ Jan 2020 – yesterday · updated daily<br>
     st.divider()
 
     # ── Dashboard toggle ──────────────────────────────────────────────────────
-    st.markdown('<p style="font-size:0.72rem;color:rgba(244,243,255,0.45);font-weight:600;letter-spacing:0.8px;text-transform:uppercase;margin:0 0 8px;font-family:\'Inter\',sans-serif;">Live Dashboard</p>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size:0.72rem;color:#D85A30;font-weight:700;letter-spacing:0.8px;text-transform:uppercase;margin:0 0 8px;font-family:\'Inter\',sans-serif;">Live Dashboard</p>', unsafe_allow_html=True)
     dashboard_url = os.getenv("LOOKER_STUDIO_URL", "").strip()
     if dashboard_url:
         show_dash = st.toggle("Show Looker Studio", value=False)
