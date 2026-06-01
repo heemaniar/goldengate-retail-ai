@@ -349,6 +349,111 @@ def _get_anomaly_alerts() -> list[str]:
         return []
 
 
+# ── Top 3 action items (cached 2 hours) ──────────────────────────────────────
+@st.cache_data(ttl=7200, show_spinner=False)
+def _get_top_actions() -> list[dict]:
+    """Return up to 3 proactive action items from live BigQuery data."""
+    actions = []
+
+    # 1. Most urgent lease expiry (next 90 days)
+    try:
+        r = query_warehouse("""
+        SELECT t.tenant_name, m.mall_name, l.lease_end_date,
+               DATE_DIFF(l.lease_end_date, CURRENT_DATE(), DAY) AS days_left
+        FROM `mallpulse-hackathon.goldengate_core.dim_lease` l
+        JOIN `mallpulse-hackathon.goldengate_core.dim_tenant` t USING (tenant_id)
+        JOIN `mallpulse-hackathon.goldengate_core.dim_mall`   m ON m.mall_id = t.mall_id
+        WHERE l.lease_end_date BETWEEN CURRENT_DATE()
+              AND DATE_ADD(CURRENT_DATE(), INTERVAL 90 DAY)
+          AND t.effective_to >= CURRENT_DATE()
+        ORDER BY l.lease_end_date LIMIT 1
+        """)
+        if "BigQuery error" not in r and "no rows" not in r.lower():
+            for line in r.strip().split("\n")[2:]:
+                parts = [p.strip() for p in line.split("|") if p.strip()]
+                if len(parts) >= 4:
+                    actions.append({
+                        "icon": "🔴",
+                        "label": "Urgent lease",
+                        "title": f"Renew **{parts[0]}** at {parts[1]}",
+                        "detail": f"Lease expires in **{parts[3]} days** ({parts[2]})",
+                        "prompt": f"What should I do about the upcoming lease for {parts[0]} at {parts[1]}?",
+                    })
+                    break
+    except Exception:
+        pass
+
+    # 2. Biggest revenue decline month-over-month
+    try:
+        r = query_warehouse("""
+        SELECT t.tenant_name, m.mall_name,
+               ROUND(SUM(CASE WHEN a.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                              THEN a.revenue ELSE 0 END), 0) AS rev_now,
+               ROUND(SUM(CASE WHEN a.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 60 DAY)
+                               AND a.date  <  DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                              THEN a.revenue ELSE 0 END), 0) AS rev_prev,
+               ROUND((SUM(CASE WHEN a.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                               THEN a.revenue ELSE 0 END)
+                     - SUM(CASE WHEN a.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 60 DAY)
+                                 AND a.date  <  DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                               THEN a.revenue ELSE 0 END))
+                    / NULLIF(SUM(CASE WHEN a.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 60 DAY)
+                                      AND a.date  <  DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                                     THEN a.revenue ELSE 0 END), 0) * 100, 1) AS pct_chg
+        FROM `mallpulse-hackathon.goldengate_core.agg_tenant_daily` a
+        JOIN `mallpulse-hackathon.goldengate_core.dim_tenant` t ON t.tenant_id = a.tenant_id
+        JOIN `mallpulse-hackathon.goldengate_core.dim_mall`   m ON m.mall_id = a.mall_id
+        WHERE a.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 60 DAY)
+          AND t.effective_to >= CURRENT_DATE()
+          AND a.mall_id != 'm04'
+        GROUP BY t.tenant_name, m.mall_name
+        HAVING rev_prev > 500 AND pct_chg < -10
+        ORDER BY pct_chg ASC LIMIT 1
+        """)
+        if "BigQuery error" not in r and "no rows" not in r.lower():
+            for line in r.strip().split("\n")[2:]:
+                parts = [p.strip() for p in line.split("|") if p.strip()]
+                if len(parts) >= 5:
+                    actions.append({
+                        "icon": "🟡",
+                        "label": "Revenue watch",
+                        "title": f"Investigate **{parts[0]}** at {parts[1]}",
+                        "detail": f"Revenue down **{parts[4]}%** vs prior 30 days",
+                        "prompt": f"Why is {parts[0]} at {parts[1]} underperforming and what should I do?",
+                    })
+                    break
+    except Exception:
+        pass
+
+    # 3. Top revenue mall last month (opportunity to reinforce)
+    try:
+        r = query_warehouse("""
+        SELECT m.mall_name, ROUND(SUM(a.total_revenue), 0) AS rev
+        FROM `mallpulse-hackathon.goldengate_core.agg_mall_daily` a
+        JOIN `mallpulse-hackathon.goldengate_core.dim_mall` m ON m.mall_id = a.mall_id
+        WHERE a.date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+          AND a.mall_id != 'm04'
+        GROUP BY m.mall_name ORDER BY rev DESC LIMIT 1
+        """)
+        if "BigQuery error" not in r and "no rows" not in r.lower():
+            for line in r.strip().split("\n")[2:]:
+                parts = [p.strip() for p in line.split("|") if p.strip()]
+                if len(parts) >= 2:
+                    rev_fmt = f"${int(parts[1].replace(',','')):,}" if parts[1].replace(',','').isdigit() else parts[1]
+                    actions.append({
+                        "icon": "🟢",
+                        "label": "Top performer",
+                        "title": f"Maximise **{parts[0]}** momentum",
+                        "detail": f"Leading portfolio last month at **{rev_fmt}**",
+                        "prompt": f"What are the top 3 actions I should take this week at {parts[0]}?",
+                    })
+                    break
+    except Exception:
+        pass
+
+    return actions
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _reset_conversation() -> None:
     """Clear chat history and start a fresh ADK session."""
@@ -470,6 +575,38 @@ if alerts:
         st.markdown(f'<div class="alert-card">{alert}</div>', unsafe_allow_html=True)
 
 st.divider()
+
+# ── Top 3 action items (shown only on fresh open, before any chat) ────────────
+if not st.session_state.get("messages"):
+    actions = _get_top_actions()
+    if actions:
+        st.markdown(
+            '<p style="font-size:0.78rem;font-weight:700;color:#1A1735;'
+            'font-family:\'Plus Jakarta Sans\',sans-serif;letter-spacing:0.2px;'
+            'margin:0 0 10px;">📋 Today\'s top action items</p>',
+            unsafe_allow_html=True,
+        )
+        cols = st.columns(len(actions))
+        for col, action in zip(cols, actions):
+            with col:
+                st.markdown(
+                    f'<div style="background:rgba(255,255,255,0.72);border:1px solid rgba(83,74,183,0.18);'
+                    f'border-radius:12px;padding:14px 16px;height:100%;">'
+                    f'<div style="font-size:1.3rem;margin-bottom:6px;">{action["icon"]}</div>'
+                    f'<div style="font-size:0.68rem;color:#D85A30;font-weight:700;letter-spacing:0.7px;'
+                    f'text-transform:uppercase;font-family:\'Inter\',sans-serif;margin-bottom:4px;">'
+                    f'{action["label"]}</div>'
+                    f'<div style="font-size:0.85rem;color:#1A1735;font-family:\'Inter\',sans-serif;'
+                    f'margin-bottom:6px;line-height:1.4;">{action["title"]}</div>'
+                    f'<div style="font-size:0.78rem;color:rgba(26,23,53,0.55);'
+                    f'font-family:\'Inter\',sans-serif;">{action["detail"]}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                if st.button("→ Ask agent", key=f"action_{action['label']}", use_container_width=True):
+                    st.session_state.pending_prompt = action["prompt"]
+                    st.rerun()
+        st.divider()
 
 _AVATAR = {"user": "🧑‍💼", "assistant": "🌉"}
 
