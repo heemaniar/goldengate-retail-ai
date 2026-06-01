@@ -240,29 +240,27 @@ def _make_prompts(mall: str) -> list[tuple[str, str]]:
     the set stays varied and interesting.
     """
     if mall and mall != "— All Malls —":
-        # All questions scoped to the chosen mall
         m = mall.replace(" (historical)", "")
         return [
-            ("↗ Revenue",     f"How much revenue did {m} generate last month?"),
-            ("◈ Top tenants", f"Who are the top 5 tenants at {m} by revenue?"),
-            ("⊘ Leases",      f"Which tenants at {m} have leases expiring in the next 6 months?"),
-            ("⇄ Cross-mall",  f"How does {m} compare to other Bay Area malls this year?"),
-            ("◌ Weather",     f"What was the weather impact on foot traffic at {m} last quarter?"),
-            ("⊕ Forecast",    f"Forecast next 30 days revenue for {m}"),
-            ("⟳ Pipeline",    "Is the Fivetran data pipeline healthy?"),
-            ("◎ Actions",     f"What are the top 3 actions I should take this week at {m}?"),
+            ("💰 Revenue",     f"How much revenue did {m} generate last month?"),
+            ("🛍️ Top tenants", f"Who are the top 5 tenants at {m} by revenue?"),
+            ("🔑 Leases",      f"Which tenants at {m} have leases expiring in the next 6 months?"),
+            ("🗺️ Cross-mall",  f"How does {m} compare to other Bay Area malls this year?"),
+            ("🌦️ Weather",     f"What was the weather impact on foot traffic at {m} last quarter?"),
+            ("📉 Forecast",    f"Forecast next 30 days revenue for {m}"),
+            ("⚙️ Pipeline",    "Is the Fivetran data pipeline healthy?"),
+            ("⚡ Actions",     f"What are the top 3 actions I should take this week at {m}?"),
         ]
     else:
-        # No filter — spread across different malls to keep variety
         return [
-            ("↗ Revenue",     "How much revenue did Westfield Valley Fair generate last month?"),
-            ("◈ Top tenants", "Who are the top 5 tenants at Stanford Shopping Center by revenue?"),
-            ("⊘ Leases",      "Which tenants at Santana Row have leases expiring in the next 6 months?"),
-            ("⇄ Cross-mall",  "Compare lululemon's performance across all Bay Area malls"),
-            ("◌ Weather",     "What was the weather impact on foot traffic at Bay Street Emeryville last quarter?"),
-            ("⊕ Forecast",    "Forecast next 30 days revenue for Broadway Plaza"),
-            ("⟳ Pipeline",    "Is the Fivetran data pipeline healthy?"),
-            ("◎ Actions",     "What are the top 3 actions I should take this week at Stoneridge Shopping Center?"),
+            ("💰 Revenue",     "How much revenue did Westfield Valley Fair generate last month?"),
+            ("🛍️ Top tenants", "Who are the top 5 tenants at Stanford Shopping Center by revenue?"),
+            ("🔑 Leases",      "Which tenants at Santana Row have leases expiring in the next 6 months?"),
+            ("🗺️ Cross-mall",  "Compare lululemon's performance across all Bay Area malls"),
+            ("🌦️ Weather",     "What was the weather impact on foot traffic at Bay Street Emeryville last quarter?"),
+            ("📉 Forecast",    "Forecast next 30 days revenue for Broadway Plaza"),
+            ("⚙️ Pipeline",    "Is the Fivetran data pipeline healthy?"),
+            ("⚡ Actions",     "What are the top 3 actions I should take this week at Stoneridge Shopping Center?"),
         ]
 
 
