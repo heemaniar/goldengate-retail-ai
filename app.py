@@ -608,12 +608,19 @@ if not st.session_state.get("messages"):
                     st.rerun()
         st.divider()
 
+def _md(text: str) -> str:
+    """Escape bare $ signs so Streamlit/KaTeX doesn't parse USD values as LaTeX math.
+    A retail dashboard never emits real LaTeX, so blanket-escaping is safe and correct.
+    """
+    return text.replace("$", r"\$")
+
+
 _AVATAR = {"user": "🧑‍💼", "assistant": "🌉"}
 
 # Render history
 for msg in st.session_state.get("messages", []):
     with st.chat_message(msg["role"], avatar=_AVATAR.get(msg["role"])):
-        st.markdown(msg["content"])
+        st.markdown(_md(msg["content"]))
         if msg["role"] == "assistant" and msg.get("sql"):
             with st.expander("Show SQL query", expanded=False):
                 st.code(msg["sql"], language="sql")
@@ -661,7 +668,7 @@ if prompt:
                     for part in event.content.parts:
                         if hasattr(part, "text") and part.text:
                             full_text += part.text
-                            text_slot.markdown(full_text + " ▌")
+                            text_slot.markdown(_md(full_text) + " ▌")
 
         except Exception as exc:
             err = str(exc).lower()
@@ -675,7 +682,7 @@ if prompt:
                 full_text = "⚠️ Something went wrong. Try rephrasing your question."
 
         status_slot.empty()
-        text_slot.markdown(full_text or "_(No response — try rephrasing your question.)_")
+        text_slot.markdown(_md(full_text) if full_text else "_(No response — try rephrasing your question.)_")
 
         if last_sql:
             with st.expander("Show SQL query", expanded=False):
