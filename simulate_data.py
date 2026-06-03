@@ -45,7 +45,7 @@ DATA = Path("data")
 DATA.mkdir(exist_ok=True)
 
 START = date(2020, 1, 1)
-END   = date(2026, 5, 27)
+END   = date.today() - timedelta(days=1)  # always yesterday — never hardcoded
 
 # ── US Holidays (California) ──────────────────────────────────────────────────
 _US_HOLIDAYS = {

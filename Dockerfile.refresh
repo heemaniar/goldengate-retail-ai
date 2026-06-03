@@ -1,0 +1,16 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends bash \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --quiet -r requirements.txt
+
+COPY simulate_data.py load_bigquery.py daily_refresh.sh ./
+RUN chmod +x daily_refresh.sh
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["bash", "daily_refresh.sh"]
