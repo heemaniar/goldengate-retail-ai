@@ -37,7 +37,11 @@ sys.path.insert(0, str(_ROOT / "agents"))
 load_dotenv(_ROOT / ".env")
 
 from agents.mallpulse.agent import root_agent  # noqa: E402 (after path setup)
-from tools.bigquery_tools import query_warehouse  # noqa: E402
+from tools.bigquery_tools import (  # noqa: E402
+    query_warehouse,
+    reset_executed_sql,
+    get_executed_sql,
+)
 
 # ── Page config (must be first Streamlit call) ────────────────────────────────
 st.set_page_config(
@@ -648,20 +652,24 @@ if prompt:
         full_text = ""
         last_sql = ""
 
+        # Capture the SQL that actually executes this turn. The real queries run
+        # inside sub-agents (data_unifier etc.), so they never appear as
+        # `query_warehouse` calls in the root event stream — instead every BQ
+        # tool records its SQL via tools.bigquery_tools.EXECUTED_SQL. Clear it
+        # here, read it after the run.
+        reset_executed_sql()
+
         try:
             for event in runner.run(
                 user_id=_get_user_id(),
                 session_id=st.session_state.adk_session_id,
                 new_message=Content(parts=[Part(text=prompt)], role="user"),
             ):
-                # Surface tool calls as live status + capture SQL
+                # Surface tool calls as live status (which specialist is running)
                 calls = event.get_function_calls() if hasattr(event, "get_function_calls") else []
                 if calls:
                     tool_names = ", ".join(f"`{c.name}`" for c in calls)
                     status_slot.caption(f"⚙️ Calling {tool_names}…")
-                    for call in calls:
-                        if call.name == "query_warehouse" and hasattr(call, "args"):
-                            last_sql = (call.args or {}).get("sql", "") or str(call.args)
 
                 # Stream partial text as it arrives
                 if event.content and event.content.parts:
@@ -684,8 +692,13 @@ if prompt:
         status_slot.empty()
         text_slot.markdown(_md(full_text) if full_text else "_(No response — try rephrasing your question.)_")
 
+        # The actual queries that ran this turn (may be several across sub-agents).
+        executed = get_executed_sql()
+        last_sql = "\n\n".join(executed)
+
         if last_sql:
-            with st.expander("Show SQL query", expanded=False):
+            label = "Show SQL query" if len(executed) == 1 else f"Show SQL ({len(executed)} queries)"
+            with st.expander(label, expanded=False):
                 st.code(last_sql, language="sql")
 
     st.session_state.messages.append({

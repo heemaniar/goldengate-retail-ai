@@ -20,6 +20,23 @@ PROJECT = "mallpulse-hackathon"
 DATASET = "goldengate_core"
 _client: bigquery.Client | None = None
 
+# Real SQL executed during the current turn. Every BQ tool (get_mall_summary,
+# get_top_tenants, forecast_mall_revenue, …) routes through query_warehouse(),
+# so appending here captures every query regardless of which sub-agent ran it.
+# The UI clears this before a turn and reads it after — see app.py. This is the
+# source of truth for "Show SQL"; the agent must never reconstruct SQL from memory.
+EXECUTED_SQL: list[str] = []
+
+
+def reset_executed_sql() -> None:
+    """Clear the captured-SQL buffer at the start of a turn."""
+    EXECUTED_SQL.clear()
+
+
+def get_executed_sql() -> list[str]:
+    """Return the SQL actually executed during the current turn."""
+    return list(EXECUTED_SQL)
+
 
 def _get_client() -> bigquery.Client:
     global _client
@@ -107,6 +124,9 @@ def query_warehouse(sql: str) -> str:
     Returns:
         Query results as a markdown table (up to 50 rows), or an error message.
     """
+    # Record the real query so the UI can show exactly what ran (no fabrication).
+    EXECUTED_SQL.append(sql.strip())
+
     normalised = sql.strip().upper()
     for keyword in ("INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "TRUNCATE", "MERGE"):
         if re.search(rf"\b{keyword}\b", normalised):
