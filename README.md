@@ -7,6 +7,7 @@
 GoldenGate Retail AI is a multi-agent system that turns a retail data warehouse into instant, actionable intelligence. Mall GMs ask natural-language questions about tenant performance, revenue trends, lease health, weather impact, and 30-day revenue forecasts — and get data-backed answers in seconds, every number traceable to the SQL behind it.
 
 **🔗 Live demo:** https://goldengate-3f3swnt3qq-uc.a.run.app
+**📊 Dashboard:** [Google Data Studio](https://datastudio.google.com/reporting/4be1a15e-fbca-4050-a89e-c6f325696ff0/page/AaQzF)
 
 ---
 
@@ -90,7 +91,7 @@ User (Streamlit chat UI — Show SQL on every answer)
 | **ML forecasting** | BigQuery ML `ARIMA_PLUS` — 30-day revenue forecast with 90% CI, US holidays |
 | **Data freshness** | Daily incremental refresh — Cloud Run Job triggered by Cloud Scheduler |
 | **UI** | Streamlit (lavender theme, live tool-call status, Show SQL expander) |
-| **Dashboard** | Google Data Studio (revenue trends, tenant performance) |
+| **Dashboard** | [Google Data Studio](https://datastudio.google.com/reporting/4be1a15e-fbca-4050-a89e-c6f325696ff0/page/AaQzF) (revenue trends, tenant performance) |
 | **Testing** | pytest accuracy regression suite (`tests/test_accuracy.py`) |
 | **Deployment** | Cloud Run (container, port 8080), Artifact Registry (`goldengate-repo`) |
 
