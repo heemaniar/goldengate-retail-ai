@@ -34,7 +34,8 @@ prompts/
 tests/
 
 # Local scripts not needed in container
-load_bigquery.py
+# NOTE: load_bigquery.py is required by the daily-refresh image (Dockerfile.refresh
+# COPYs it; daily_refresh.sh runs it), so it must NOT be excluded here.
 load_postgres.py
 prep_data.py
 run_agent.sh

@@ -7,6 +7,7 @@ Usage (with venv active):
 Requires: gcloud application-default credentials (run `gcloud auth application-default login`)
 """
 
+import os
 import pandas as pd
 from pathlib import Path
 from google.cloud import bigquery
@@ -14,6 +15,16 @@ from google.cloud import bigquery
 PROJECT   = "mallpulse-hackathon"
 DATASET   = "goldengate_core"
 DATA      = Path("data")
+
+# ── Refresh mode ──────────────────────────────────────────────────────────────
+# REFRESH_MODE=incremental → the three large fact tables are WRITE_APPEND'd
+# (the CSVs produced by simulate_data.py in incremental mode hold only the new
+# days). Dimension tables are always WRITE_TRUNCATE'd — they are small and
+# regenerated in full. Default (unset / "full") truncates everything, which is
+# what the initial one-shot build needs.
+REFRESH_MODE  = os.environ.get("REFRESH_MODE", "full").strip().lower()
+INCREMENTAL   = REFRESH_MODE == "incremental"
+APPEND_TABLES = {"fact_transactions", "fact_weather", "fact_foot_traffic"}
 
 # Schema overrides for columns that need explicit types
 # (pandas infers bool as BOOL fine; dates need TIMESTAMP → DATE override)
@@ -115,16 +126,22 @@ for name in TABLES:
     table_ref = f"{dataset_ref}.{name}"
     schema    = TABLE_SCHEMAS.get(name)
 
+    append    = INCREMENTAL and name in APPEND_TABLES
+    write_mode = (
+        bigquery.WriteDisposition.WRITE_APPEND if append
+        else bigquery.WriteDisposition.WRITE_TRUNCATE
+    )
+
     job_config = bigquery.LoadJobConfig(
         source_format        = bigquery.SourceFormat.CSV,
         skip_leading_rows    = 1,
         autodetect           = schema is None,
         schema               = schema,
-        write_disposition    = bigquery.WriteDisposition.WRITE_TRUNCATE,
+        write_disposition    = write_mode,
         null_marker          = "",
     )
 
-    print(f"  Loading {name}...", end=" ", flush=True)
+    print(f"  Loading {name} ({'append' if append else 'truncate'})...", end=" ", flush=True)
     with open(csv_path, "rb") as f:
         job = client.load_table_from_file(f, table_ref, job_config=job_config)
     job.result()  # wait

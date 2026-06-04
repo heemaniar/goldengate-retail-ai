@@ -30,6 +30,7 @@ Run:
 """
 
 import math
+import os
 import random
 import uuid
 from datetime import date, timedelta
@@ -46,6 +47,27 @@ DATA.mkdir(exist_ok=True)
 
 START = date(2020, 1, 1)
 END   = date.today() - timedelta(days=1)  # always yesterday — never hardcoded
+
+# ── Incremental refresh support ───────────────────────────────────────────────
+# Dimension tables (and dim_date) are always regenerated for the FULL history
+# from START — they are small and cheap. The three large fact loops
+# (transactions, weather, foot traffic) instead start from FACT_START, so a
+# daily refresh only generates the MISSING days and WRITE_APPENDs them rather
+# than regenerating ~6 years of facts every run (which overran the Cloud Run
+# task timeout and left the warehouse stuck).
+#
+#   FACT_START_DATE=YYYY-MM-DD  → first day of facts to (re)generate
+#   INVOICE_START=<int>         → next free invoice number, so appended
+#                                 INV######## ids never collide with existing
+# Both are computed and exported by daily_refresh.sh. Unset → full rebuild.
+_fact_start_env = os.environ.get("FACT_START_DATE", "").strip()
+FACT_START      = date.fromisoformat(_fact_start_env) if _fact_start_env else START
+INVOICE_START   = int(os.environ.get("INVOICE_START", "1000000"))
+INCREMENTAL     = FACT_START > START
+
+if INCREMENTAL:
+    print(f"⏩ Incremental mode: facts {FACT_START} → {END} "
+          f"(dims full from {START}); invoices start at {INVOICE_START:,}")
 
 # ── US Holidays (California) ──────────────────────────────────────────────────
 _US_HOLIDAYS = {
@@ -731,7 +753,7 @@ CUSTOMER_IDS = [f"C{100000 + i}" for i in range(NUM_CUSTOMERS)]
 PAYMENT_METHODS = ["Credit Card", "Debit Card", "Apple Pay", "Cash", "Buy Now Pay Later"]
 PAYMENT_WEIGHTS = [0.42, 0.25, 0.18, 0.08, 0.07]
 
-invoice_counter = 1_000_000
+invoice_counter = INVOICE_START
 txn_rows = []
 
 # Group tenants by mall for efficient iteration
@@ -742,10 +764,10 @@ for (tid, _, mall_id) in ASSIGNMENTS:
     if tid + "_r" in TENANT_PROFILE:
         mall_tenants[mall_id].append(tid + "_r")
 
-TOTAL_DAYS = (END - START).days + 1
+TOTAL_DAYS = (END - FACT_START).days + 1
 checkpoint_days = set(range(0, TOTAL_DAYS, 200))
 
-d = START
+d = FACT_START
 day_num = 0
 while d <= END:
     if day_num in checkpoint_days:
@@ -837,7 +859,7 @@ weather_rows = []
 for m in MALLS:
     mid, mname, city, *_ = m
     wc = CITY_WEATHER.get(city, CITY_WEATHER["San Jose"])
-    d = START
+    d = FACT_START
     while d <= END:
         doy_rad = 2 * math.pi * (d.timetuple().tm_yday / 365.0)
         # Temperature: annual cycle (coldest Jan, warmest Sep for SF, Aug for inland)
@@ -905,7 +927,7 @@ BASE_DAILY_VISITS = {
 traffic_rows = []
 for mid in MALL_IDS:
     base = BASE_DAILY_VISITS[mid]
-    d = START
+    d = FACT_START
     while d <= END:
         v_mult = _volume_mult(d, mid)
         s_mult = _seasonal_mult(d)

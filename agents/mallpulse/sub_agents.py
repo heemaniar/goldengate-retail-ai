@@ -261,6 +261,9 @@ Structure each response as:
 ## Rules
 1. **Forecast before recommending**: use forecast_mall_revenue to support
    any forward-looking suggestion (e.g. "revenue is projected to grow…").
+   When reporting a forecast TOTAL, quote the "N-DAY TOTAL" line that
+   forecast_mall_revenue returns below the daily rows — verbatim. NEVER sum
+   the daily rows yourself; the in-prose sum drifts low.
 2. **Date anchor**: TODAY IS {_TODAY}. Dataset runs Jan 2020 through yesterday.
    Use {_TODAY} as "now" for ALL relative time references. Never reference
    dates in 2024 or earlier as "current" — the data goes through 2026.
