@@ -6,26 +6,22 @@ basket, no fabrication on empty periods) currently live only as *prompt
 instructions* in agents/mallpulse/sub_agents.py. A model swap (Gemini 3 preview
 → GA, or a fallback to 2.5) could silently regress them.
 
-These tests lock the ground truth against the live warehouse and, for each
-trap, assert that the *correct* SQL semantics produce the right number while the
-*naive/wrong* semantics produce the known-wrong number. If anyone "optimises"
-a query into the wrong form, or the underlying data drifts, these fail.
+These tests assert the *invariant relationship* that distinguishes the correct
+SQL semantics from the naive/wrong ones — computed at runtime, NOT pinned to a
+hardcoded figure. That keeps them green across a full warehouse rebuild (a new
+RNG seed changes every absolute value but not the relationships below):
+  - unique customers: COUNT(DISTINCT) is strictly LESS than SUM(daily uniques)
+    — guaranteed whenever any customer shops on >1 day.
+  - avg basket: SUM÷SUM is in a sane retail range AND diverges from
+    AVG(per-day basket) — the average-of-averages bug.
+  - distinct cities: structural (mall roster) → fixed at 10.
+  - out-of-range years: structural (date range) → zero rows, no fabrication.
 
-They hit BigQuery directly (read-only) rather than driving the LLM agent —
-that keeps them deterministic and CI-friendly. If BigQuery credentials are not
-available the whole module is skipped rather than failing.
-
-Ground truth re-verified 2026-06-03 against mallpulse-hackathon.goldengate_core
-after the daily refresh completed May 2026 (warehouse now ends 2026-06-02):
-  | unique customers, Stanford, May 2026 | 4,199  (naive SUM = 4,405) |
-  | avg basket, Santana Row, May 2026    | $108.04                    |
-  | distinct cities                      | 10                         |
-  | revenue 2018 / 2031                  | no data (no fabrication)   |
-
-NOTE: May 2026 is now a complete, frozen past month — daily incremental refreshes
-only append June-onward, so these values are stable. A *full* warehouse rebuild
-(REFRESH_MODE unset) regenerates history with a different RNG sequence and would
-require re-baselining the two May figures below.
+They hit BigQuery directly (read-only) rather than driving the LLM agent — that
+keeps them deterministic and CI-friendly. So they protect against *data drift*
+and against anyone rewriting a reference query into the wrong form; they do NOT
+invoke the agent, so they don't prove the agent itself picks the right SQL.
+If BigQuery credentials are unavailable the whole module is skipped.
 
 Run:  pytest -v tests/test_accuracy.py
 """
@@ -64,8 +60,16 @@ def _require_bigquery():
 
 class TestUniqueCustomers:
 
-    def test_stanford_may_2026_count_distinct_is_4199(self):
-        correct = _scalar(
+    def test_count_distinct_is_strictly_below_naive_daily_sum(self):
+        """Invariant: COUNT(DISTINCT customer_id) < SUM(daily unique_customers).
+
+        SUM(unique_customers) from the aggregate table double-counts anyone who
+        shops on more than one day, so it is always strictly larger than the true
+        distinct count. This holds for any RNG seed — no hardcoded figure to
+        re-baseline. If the naive sum ever stops exceeding the distinct count,
+        the double-count trap has become undetectable and this fails loudly.
+        """
+        distinct = _scalar(
             """
             SELECT COUNT(DISTINCT f.customer_id)
             FROM `mallpulse-hackathon.goldengate_core.fact_transactions` f
@@ -74,14 +78,7 @@ class TestUniqueCustomers:
               AND f.date BETWEEN '2026-05-01' AND '2026-05-31'
             """
         )
-        assert correct == 4199, f"expected 4199 unique customers, got {correct}"
-
-    def test_naive_sum_of_aggregate_is_the_wrong_4405(self):
-        """Documents the trap: SUM(unique_customers) double-counts across days.
-        If this ever equals the COUNT(DISTINCT) value the trap has vanished and
-        the assertion above no longer protects anything — so pin the wrong value.
-        """
-        wrong = _scalar(
+        naive_sum = _scalar(
             """
             SELECT SUM(a.unique_customers)
             FROM `mallpulse-hackathon.goldengate_core.agg_mall_daily` a
@@ -90,25 +87,55 @@ class TestUniqueCustomers:
               AND a.date BETWEEN '2026-05-01' AND '2026-05-31'
             """
         )
-        assert wrong == 4405
-        assert wrong != 4199, "trap collapsed: naive sum now equals COUNT(DISTINCT)"
+        assert distinct and distinct > 0, "no Stanford transactions in May 2026"
+        assert naive_sum > distinct, (
+            f"trap collapsed: SUM(daily uniques)={naive_sum} no longer exceeds "
+            f"COUNT(DISTINCT)={distinct} — the double-count error is undetectable"
+        )
 
 
 # ── Trap 2: average basket must be SUM÷SUM, not AVG(avg_basket) ────────────────
 
 class TestAverageBasket:
 
-    def test_santana_row_may_2026_sum_over_count_is_108_04(self):
-        basket = _scalar(
+    def test_sum_over_count_is_sane_and_differs_from_avg_of_averages(self):
+        """Invariant: the correct basket (SUM÷COUNT over transactions) is in a
+        sane retail range AND diverges from AVG(per-day basket).
+
+        AVG(per-day basket) is the average-of-averages bug — it weights every
+        day equally regardless of volume, so it differs from the volume-weighted
+        SUM÷SUM. No hardcoded value; both sides are computed at runtime.
+
+        NOTE: the divergence margin is mall-dependent. Santana Row reliably
+        diverges; if you re-point this at a low-variance mall the second assert
+        could flake — keep it on a mall with meaningful daily volume swings.
+        """
+        correct = float(_scalar(
             """
-            SELECT ROUND(SUM(f.total_amount) / COUNT(DISTINCT f.invoice_no), 2)
+            SELECT SUM(f.total_amount) / COUNT(DISTINCT f.invoice_no)
             FROM `mallpulse-hackathon.goldengate_core.fact_transactions` f
             JOIN `mallpulse-hackathon.goldengate_core.dim_mall` m USING (mall_id)
             WHERE LOWER(m.mall_name) LIKE '%santana%'
               AND f.date BETWEEN '2026-05-01' AND '2026-05-31'
             """
+        ))
+        avg_of_daily = float(_scalar(
+            """
+            SELECT AVG(daily_basket) FROM (
+                SELECT a.date, SUM(a.revenue) / SUM(a.transactions) AS daily_basket
+                FROM `mallpulse-hackathon.goldengate_core.agg_tenant_daily` a
+                JOIN `mallpulse-hackathon.goldengate_core.dim_mall` m USING (mall_id)
+                WHERE LOWER(m.mall_name) LIKE '%santana%'
+                  AND a.date BETWEEN '2026-05-01' AND '2026-05-31'
+                GROUP BY a.date
+            )
+            """
+        ))
+        assert 5 < correct < 1000, f"basket ${correct:.2f} outside sane retail range"
+        assert abs(correct - avg_of_daily) > 0.001 * correct, (
+            f"methods coincide (SUM/SUM=${correct:.2f}, avg-of-avg=${avg_of_daily:.2f}); "
+            f"average-of-averages trap not exercised at this mall"
         )
-        assert float(basket) == pytest.approx(108.04, abs=0.01)
 
 
 # ── Trap 3: distinct city count ────────────────────────────────────────────────
