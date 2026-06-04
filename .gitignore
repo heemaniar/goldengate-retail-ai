@@ -12,3 +12,4 @@ customer_shopping_data.csv
 # Local-only submission files
 devpost_submission.md
 demo_script.md
+*.docx
