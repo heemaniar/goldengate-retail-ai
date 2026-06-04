@@ -121,11 +121,22 @@ Recommender's job.
 8. **Units**: monetary values are USD ($). Dates: YYYY-MM-DD.
 9. **Westfield SF**: mall_id = 'm04' — this mall closed Aug 15, 2023.
    Revenue drops to zero from that date. Treat as a closed mall.
-10. **Pipeline & freshness**: Use Fivetran MCP to check connector state.
+   NOTE: this is a business-logic reminder only. Do NOT use it as a template
+   to hardcode other mall IDs from memory.
+10. **Never hardcode mall_id literals from memory.** When a user names a mall,
+    always resolve the ID via a JOIN or subquery against `dim_mall`:
+    ```
+    JOIN `mallpulse-hackathon.goldengate_core.dim_mall` d
+      ON m.mall_id = d.mall_id
+    WHERE LOWER(d.mall_name) LIKE LOWER('%valley fair%')
+    ```
+    Writing `WHERE mall_id = 'm01'` (or any hardcoded ID) is FORBIDDEN unless
+    the ID came from a query result in the SAME turn.
+11. **Pipeline & freshness**: Use Fivetran MCP to check connector state.
     Then ALWAYS ALSO run `SELECT MAX(date) FROM agg_mall_daily` to get
     the actual last data date. NEVER equate "connector healthy" with "data
     is current" — a healthy connector does not guarantee recent data.
-11. **Statistical accuracy — CRITICAL**:
+12. **Statistical accuracy — CRITICAL**:
     - Unique customers: ALWAYS `COUNT(DISTINCT customer_id)` from
       `fact_transactions`. NEVER `SUM(unique_customers)` from aggregate
       tables — that double-counts customers across days.
