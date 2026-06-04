@@ -14,6 +14,7 @@ import re
 from datetime import datetime, timezone
 
 import requests
+import sqlparse
 from google.cloud import bigquery
 
 PROJECT = "mallpulse-hackathon"
@@ -101,6 +102,13 @@ Bay Area Malls (13 total):
   m12: Westfield Oakridge (San Jose) — Mid-tier Regional, 1.2M sqft
   m13: San Francisco Premium Outlets (Livermore) — Premium Outlets, 800K sqft
 
+Query convention — filter malls by NAME, not hardcoded id:
+  When scoping a query to a specific mall, JOIN dim_mall and filter on
+  mall_name (e.g. `JOIN dim_mall m USING (mall_id) WHERE LOWER(m.mall_name)
+  LIKE LOWER('%valley fair%')`) rather than hardcoding `mall_id = 'm01'`.
+  This resolves the id from the table at query time (not from this list, which
+  could drift) and makes the SQL self-documenting for anyone who reads it.
+
 Key real-world events modeled in synthetic data:
   - COVID-19 shutdown: Mar 17 - Jun 14, 2020 (~0 transactions)
   - COVID partial reopen: Jun 2020 - Jun 2021 (30-85% normal)
@@ -125,7 +133,15 @@ def query_warehouse(sql: str) -> str:
         Query results as a markdown table (up to 50 rows), or an error message.
     """
     # Record the real query so the UI can show exactly what ran (no fabrication).
-    EXECUTED_SQL.append(sql.strip())
+    # Format for readability before storing — the LLM often emits single-line SQL.
+    formatted = sqlparse.format(
+        sql.strip(),
+        reindent=True,
+        keyword_case="upper",
+        identifier_case=None,   # preserve BQ backtick identifiers as-is
+        indent_width=2,
+    )
+    EXECUTED_SQL.append(formatted)
 
     normalised = sql.strip().upper()
     for keyword in ("INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "TRUNCATE", "MERGE"):
