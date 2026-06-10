@@ -84,7 +84,7 @@ User (Streamlit chat UI — Show SQL on every answer)
 
 | Layer | Technology |
 |---|---|
-| **AI agents** | Google ADK 1.34, Gemini 3 Flash Preview (Vertex AI global) |
+| **AI agents** | Google Agent Development Kit (ADK 1.34) — part of Vertex AI Agent Builder — with Gemini 3 Flash Preview (Vertex AI global) |
 | **Orchestration** | Root agent → 3 specialist sub-agents via `AgentTool` |
 | **Partner integration** | Fivetran MCP server, wired via ADK `McpToolset` (read-only connector tools) |
 | **Data warehouse** | BigQuery (`goldengate_core`: 10 tables + ARIMA model + forecast cache) |
@@ -93,7 +93,7 @@ User (Streamlit chat UI — Show SQL on every answer)
 | **UI** | Streamlit (lavender theme, live tool-call status, Show SQL expander) |
 | **Dashboard** | [Google Data Studio](https://datastudio.google.com/reporting/4be1a15e-fbca-4050-a89e-c6f325696ff0/page/AaQzF) (revenue trends, tenant performance) |
 | **Testing** | pytest accuracy regression suite (`tests/test_accuracy.py`) |
-| **Deployment** | Cloud Run (container, port 8080), Artifact Registry (`goldengate-repo`) |
+| **Deployment** | Cloud Run (container, port 8080) — a Google-documented ADK runtime — via Artifact Registry (`goldengate-repo`) |
 
 ---
 
